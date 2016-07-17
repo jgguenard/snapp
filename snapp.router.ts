@@ -16,7 +16,7 @@ namespace sn
             return path.toString().replace(/\/$/, '').replace(/^\//, '');
         },
 
-        param: function(key: number | string, default_value: any)
+        param: function(key: number | string, default_value?: any)
         {
             if(sn.isInteger(key))
                 return this.params[key] || default_value;

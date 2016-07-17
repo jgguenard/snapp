@@ -11,6 +11,7 @@ var sn;
     sn.log = log;
     function isInteger(value) {
         let x;
+        
         return isNaN(value) ? !1 : (x = parseFloat(value), (0 | x) === x);
     }
     sn.isInteger = isInteger;
@@ -21,14 +22,24 @@ var sn;
     sn.mount = mount;
     class Component {
         constructor(definition) {
+            this.activeRenderJob = null;
             this.definition = definition;
             this.observables = [];
-            this.data = new Proxy({}, {
+            let $this = this;
+            this.scope = new Proxy({}, {
                 get: function (obj, prop) {
+                    if (obj[prop] !== undefined && typeof obj[prop] !== "function" && $this.observables.indexOf(prop) < 0) {
+                        sn.log("Observing property <" + $this.definition.name + "::" + prop.toString() + ">");
+                        $this.observables.push(prop);
+                    }
                     return obj[prop];
                 },
                 set: function (obj, prop, value) {
                     obj[prop] = value;
+                    if (typeof value !== "function" && $this.observables.indexOf(prop) >= 0) {
+                        sn.log("Rendering of <" + $this.definition.name + "> triggered by observable <" + $this.definition.name + "::" + prop.toString() + ">");
+                        $this.render();
+                    }
                     return true;
                 }
             });
@@ -36,9 +47,12 @@ var sn;
         mount(container) {
             sn.log("Mounting component <" + this.definition.name + ">");
             this.container = container;
-            this.v_container = sn.vdom.createVirtualContainer(container);
+            this.vContainer = sn.vdom.createVirtualContainer(container);
+            for (let p in this.definition)
+                if (typeof this.definition[p] == "function")
+                    this.scope[p] = this.definition[p];
             if (this.definition.controller) {
-                this.definition.controller.call(this.data);
+                this.definition.controller.call(this.scope);
             }
             this.render();
             sn.log("Component <" + this.definition.name + "> mounted");
@@ -48,12 +62,19 @@ var sn;
         }
         render() {
             if (this.definition.view) {
-                let node = this.definition.view.call(this.data, this.v_container);
-                if (sn.vdom.isVirtualNode(node))
-                    node = sn.vdom.createVirtualContainer(node);
-                let changes = sn.vdom.diff(this.container, node);
-                sn.vdom.apply(changes);
-                sn.log("Rendering component <" + this.definition.name + ">");
+                if (this.activeRenderJob) {
+                    sn.log("Rendering request for <" + this.definition.name + "> ignored");
+                    clearTimeout(this.activeRenderJob);
+                }
+                this.activeRenderJob = setTimeout(() => {
+                    let node = this.definition.view.call(this.scope, this.vContainer);
+                    if (sn.vdom.isVirtualNode(node))
+                        node = sn.vdom.createVirtualContainer(node);
+                    let changes = sn.vdom.diff(this.container, node);
+                    sn.vdom.apply(changes);
+                    sn.log("Rendering component <" + this.definition.name + ">");
+                    this.activeRenderJob = null;
+                }, 100);
             }
         }
     }
@@ -136,12 +157,12 @@ var sn;
 (function (sn) {
     sn.vdom = {
         operation: {
-            APPEND_CHILD: 1,
-            REPLACE_CHILD: 2,
-            REMOVE_CHILD: 3,
-            REMOVE_ATTRIBUTE: 4,
-            SET_ATTRIBUTE: 5,
-            SET_EVENT: 6
+            APPEND_CHILD: "APPEND_CHILD",
+            REPLACE_CHILD: "REPLACE_CHILD",
+            REMOVE_CHILD: "REMOVE_CHILD",
+            REMOVE_ATTRIBUTE: "REMOVE_ATTRIBUTE",
+            SET_ATTRIBUTE: "SET_ATTRIBUTE",
+            SET_EVENT: "SET_EVENT"
         },
         node: {
             COMMENT: 8,
@@ -243,6 +264,7 @@ var sn;
         diff: function (srcNode, dstNode) {
             let operations = [];
             let dstChildCount = (dstNode.childNodes) ? dstNode.childNodes.length : 0;
+            let srcChildCount = (srcNode.childNodes) ? srcNode.childNodes.length : 0;
             for (let c = 0; c < dstChildCount; c++) {
                 let dstChild = dstNode.childNodes[c];
                 let srcChild = srcNode.childNodes[c];
@@ -253,17 +275,30 @@ var sn;
                         node: dstChild
                     });
                 }
-                else if (srcChild.nodeType !== dstChild.nodeType) {
-                    console.log("TODO: replace child");
+                else if (srcChild.nodeType !== dstChild.nodeType || srcChild["tagName"] || (srcChild["tagName"] !== dstChild["tagName"])) {
+                    operations.push({
+                        type: sn.vdom.operation.REPLACE_CHILD,
+                        source: srcNode,
+                        destination: dstChild,
+                        node: srcChild
+                    });
                 }
                 else {
                     operations = operations.concat(this.diffNode(srcChild, dstChild));
                 }
             }
+            if (dstChildCount < srcChildCount) {
+                for (let c = dstChildCount; c < srcChildCount; c++) {
+                    operations.push({
+                        type: sn.vdom.operation.REMOVE_CHILD,
+                        source: srcNode,
+                        node: srcNode.childNodes[c],
+                    });
+                }
+            }
             return operations;
         },
         apply: function (operations) {
-            console.log(operations);
             for (let o in operations) {
                 let operation = operations[o];
                 switch (operation.type) {
@@ -272,7 +307,10 @@ var sn;
                         operation.source.appendChild(clone);
                         break;
                     case sn.vdom.operation.REPLACE_CHILD:
-                        operation.source.parentNode.replaceChild(operation.source, operation.destination);
+                        let new_child = (this.isVirtualNode(operation.destination))
+                            ? this.createRealNode(operation.destination)
+                            : operation.destination;
+                        operation.source.replaceChild(new_child, operation.node);
                         break;
                     case sn.vdom.operation.REMOVE_CHILD:
                         operation.source.removeChild(operation.node);
@@ -341,7 +379,8 @@ var sn;
                 else {
                     node.childNodes = [{
                             nodeType: sn.vdom.node.TEXT,
-                            textContent: childNodes
+                            textContent: childNodes,
+                            virtual: true
                         }];
                 }
             }

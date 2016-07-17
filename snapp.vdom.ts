@@ -4,12 +4,12 @@ namespace sn
 
         // node operation types
         operation: {
-            APPEND_CHILD: 1,
-            REPLACE_CHILD: 2,
-            REMOVE_CHILD: 3,
-            REMOVE_ATTRIBUTE: 4,
-            SET_ATTRIBUTE: 5,
-            SET_EVENT: 6
+            APPEND_CHILD: "APPEND_CHILD",
+            REPLACE_CHILD: "REPLACE_CHILD",
+            REMOVE_CHILD: "REMOVE_CHILD",
+            REMOVE_ATTRIBUTE: "REMOVE_ATTRIBUTE",
+            SET_ATTRIBUTE: "SET_ATTRIBUTE",
+            SET_EVENT: "SET_EVENT"
         },
 
         // dom node types
@@ -127,7 +127,9 @@ namespace sn
             let operations = [];
 
             let dstChildCount = (dstNode.childNodes) ? dstNode.childNodes.length : 0;
+            let srcChildCount = (srcNode.childNodes) ? srcNode.childNodes.length : 0;
 
+            // compare destination children with source
             for(let c = 0; c < dstChildCount; c++) {
 
                 let dstChild = dstNode.childNodes[c];
@@ -141,21 +143,38 @@ namespace sn
                         source: srcNode,
                         node: dstChild
                     });
-                } else if(srcChild.nodeType !== dstChild.nodeType) {
+                } else if(srcChild.nodeType !== dstChild.nodeType || srcChild["tagName"] || (srcChild["tagName"] !== dstChild["tagName"])) {
                     // replace child
-                    console.log("TODO: replace child");
+                    operations.push({
+                        type: sn.vdom.operation.REPLACE_CHILD,
+                        source: srcNode,
+                        destination: dstChild,
+                        node: srcChild
+                    });
                 } else {
                     // compare children
                     operations = operations.concat(this.diffNode(srcChild, dstChild));
                 }
             }
+
+            // check if we have nodes to remove
+            if(dstChildCount < srcChildCount)
+            {
+                for(let c = dstChildCount; c < srcChildCount; c++) {
+                    operations.push({
+                        type: sn.vdom.operation.REMOVE_CHILD,
+                        source: srcNode,
+                        node: srcNode.childNodes[c],
+                    });
+                }
+            }
+
             return operations;
         },
 
         // apply operations to nodes
         apply: function(operations: Array<any>)
         {
-            console.log(operations);
             for(let o in operations)
             {
                 let operation = operations[o];
@@ -166,7 +185,10 @@ namespace sn
                         operation.source.appendChild(clone);
                         break;
                     case sn.vdom.operation.REPLACE_CHILD:
-                        operation.source.parentNode.replaceChild(operation.source, operation.destination);
+                        let new_child = (this.isVirtualNode(operation.destination))
+                            ? this.createRealNode(operation.destination)
+                            : operation.destination;
+                        operation.source.replaceChild(new_child, operation.node);
                         break;
                     case sn.vdom.operation.REMOVE_CHILD:
                         operation.source.removeChild(operation.node);
@@ -251,7 +273,8 @@ namespace sn
                 } else {
                     node.childNodes = [{
                         nodeType: sn.vdom.node.TEXT,
-                        textContent: childNodes
+                        textContent: childNodes,
+                        virtual: true
                     }];
                 }
             }
