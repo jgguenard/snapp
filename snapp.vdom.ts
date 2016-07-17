@@ -16,7 +16,8 @@ namespace sn
         node: {
             COMMENT: 8,
             ELEMENT: 1,
-            TEXT: 3
+            TEXT: 3,
+            COMPONENT: 99
         },
 
         // change value of a DOM attribute
@@ -225,8 +226,10 @@ namespace sn
             let realNode;
             if(node.nodeType === sn.vdom.node.TEXT)
             {
+                // TEXT
                 realNode = document.createTextNode(node.textContent);
             } else if(node.nodeType === sn.vdom.node.ELEMENT) {
+                // DOM ELEMENT
                 realNode = document.createElement(node.tagName);
                 if (node.attributes) {
                     for (var a = 0; a < node.attributes.length; a++) {
@@ -236,20 +239,26 @@ namespace sn
                 }
 
                 if (node.childNodes) {
-                    var virtualContainer = this.createVirtualContainer();
+                    var virtualContainer = document.createDocumentFragment();
                     for (var a = 0; a < node.childNodes.length; a++) {
-                        virtualContainer.appendChild(this.createRealNode(node.childNodes[a]));
+                        let child = node.childNodes[a];
+                        if(child)
+                            virtualContainer.appendChild(this.createRealNode(child));
                     }
                     if (realNode.appendChild) {
                         realNode.appendChild(virtualContainer);
                     }
                 }
+            } else if(node.nodeType === sn.vdom.node.COMPONENT) {
+                // COMPONENT
+                realNode = document.createElement("DIV");
+                sn.mount(realNode, node.tagName);
             }
             return realNode;
         },
 
         // create a virtual node from parameters
-        createVirtualNode: function(tagName: string, attributes, childNodes)
+        createVirtualNode: function(tagName: string, attributes?, childNodes?)
         {
             var node;
 
@@ -281,30 +290,32 @@ namespace sn
             return node;
         },
 
-        createVirtualContainer: function(node?)
+        createContainerFromNode: function(node)
         {
             let container;
-            let isVirtualNode = this.isVirtualNode(node);
+            let isVirtual = this.isVirtualNode(node);
 
-            if(node || !isVirtualNode)
+            if(!isVirtual)
+            {
                 container = document.createDocumentFragment();
-
-            if(isVirtualNode === true){
+                if(node)
+                    for(let c in node.childNodes)
+                    {
+                        let child = node.childNodes[c];
+                        if(child.cloneNode) {
+                            let clone = child.cloneNode(true);
+                            container.appendChild(clone);
+                        }
+                    }
+            } else {
                 container = {
                     nodeType: sn.vdom.node.ELEMENT,
                     tagName: "DIV",
-                    childNodes: [node]
-                }
-            } else if(node) {
-                for(let c in node.childNodes)
-                {
-                    let child = node.childNodes[c];
-                    if(child.cloneNode) {
-                        let clone = child.cloneNode(true);
-                        container.appendChild(clone);
-                    }
+                    childNodes: node ? [node] : [],
+                    virtual: true
                 }
             }
+
             return container;
         },
 
@@ -315,6 +326,3 @@ namespace sn
         }
     }
 }
-
-// shortcut to create an element
-var el = sn.vdom.createVirtualNode;

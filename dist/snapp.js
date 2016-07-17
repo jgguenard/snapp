@@ -4,6 +4,23 @@ var sn;
         logPrefix: "snapp: ",
         debug: true
     };
+    sn.componentMethods = ["controller", "view", "dispose"];
+    function element(tagName, attributes, childNodes) {
+        if (!tagName || tagName === "")
+            return null;
+        if (typeof tagName === "object") {
+            return {
+                nodeType: sn.vdom.node.COMPONENT,
+                tagName: tagName,
+                attributes: attributes,
+                virtual: true
+            };
+        }
+        else {
+            return sn.vdom.createVirtualNode(tagName, attributes, childNodes);
+        }
+    }
+    sn.element = element;
     function log(message) {
         if (sn.config.debug === true)
             console.log(sn.config.logPrefix + message);
@@ -11,7 +28,6 @@ var sn;
     sn.log = log;
     function isInteger(value) {
         let x;
-        
         return isNaN(value) ? !1 : (x = parseFloat(value), (0 | x) === x);
     }
     sn.isInteger = isInteger;
@@ -23,6 +39,7 @@ var sn;
     class Component {
         constructor(definition) {
             this.activeRenderJob = null;
+            this.mounted = false;
             this.definition = definition;
             this.observables = [];
             let $this = this;
@@ -45,11 +62,16 @@ var sn;
             });
         }
         mount(container) {
+            let oldComponent = sn.vdom.getAttribute(container, "data-sn-component");
+            if (oldComponent)
+                oldComponent.unmount();
             sn.log("Mounting component <" + this.definition.name + ">");
+            sn.vdom.setAttribute(container, "data-sn-component", this);
+            this.mounted = true;
             this.container = container;
-            this.vContainer = sn.vdom.createVirtualContainer(container);
+            this.vContainer = sn.vdom.createContainerFromNode(container);
             for (let p in this.definition)
-                if (typeof this.definition[p] == "function")
+                if (typeof this.definition[p] == "function" && sn.componentMethods.indexOf(p) < 0)
                     this.scope[p] = this.definition[p];
             if (this.definition.controller) {
                 this.definition.controller.call(this.scope);
@@ -58,28 +80,33 @@ var sn;
             sn.log("Component <" + this.definition.name + "> mounted");
         }
         unmount() {
+            if (this.definition.dispose)
+                this.definition.dispose.call(this.scope);
+            this.mounted = false;
             sn.log("Component <" + this.definition.name + "> unmounted");
         }
         render() {
-            if (this.definition.view) {
+            if (this.mounted === true && this.definition.view) {
                 if (this.activeRenderJob) {
                     sn.log("Rendering request for <" + this.definition.name + "> ignored");
                     clearTimeout(this.activeRenderJob);
                 }
-                this.activeRenderJob = setTimeout(() => {
-                    let node = this.definition.view.call(this.scope, this.vContainer);
-                    if (sn.vdom.isVirtualNode(node))
-                        node = sn.vdom.createVirtualContainer(node);
-                    let changes = sn.vdom.diff(this.container, node);
-                    sn.vdom.apply(changes);
-                    sn.log("Rendering component <" + this.definition.name + ">");
-                    this.activeRenderJob = null;
-                }, 100);
+                let node = this.definition.view.call(this.scope, this.vContainer);
+                if (sn.vdom.isVirtualNode(node))
+                    node = sn.vdom.createContainerFromNode(node);
+                let changes = sn.vdom.diff(this.container, node);
+                sn.vdom.apply(changes);
+                sn.log("Rendering component <" + this.definition.name + ">");
+                this.activeRenderJob = null;
+            }
+            else {
+                sn.log("Rendering request for <" + this.definition.name + "> ignored");
             }
         }
     }
     sn.Component = Component;
 })(sn || (sn = {}));
+var el = sn.element;
 var sn;
 (function (sn) {
     sn.router = {
@@ -167,7 +194,8 @@ var sn;
         node: {
             COMMENT: 8,
             ELEMENT: 1,
-            TEXT: 3
+            TEXT: 3,
+            COMPONENT: 99
         },
         setAttribute: function (node, name, value) {
             if (name === 'class') {
@@ -348,14 +376,20 @@ var sn;
                     }
                 }
                 if (node.childNodes) {
-                    var virtualContainer = this.createVirtualContainer();
+                    var virtualContainer = document.createDocumentFragment();
                     for (var a = 0; a < node.childNodes.length; a++) {
-                        virtualContainer.appendChild(this.createRealNode(node.childNodes[a]));
+                        let child = node.childNodes[a];
+                        if (child)
+                            virtualContainer.appendChild(this.createRealNode(child));
                     }
                     if (realNode.appendChild) {
                         realNode.appendChild(virtualContainer);
                     }
                 }
+            }
+            else if (node.nodeType === sn.vdom.node.COMPONENT) {
+                realNode = document.createElement("DIV");
+                sn.mount(realNode, node.tagName);
             }
             return realNode;
         },
@@ -386,26 +420,27 @@ var sn;
             }
             return node;
         },
-        createVirtualContainer: function (node) {
+        createContainerFromNode: function (node) {
             let container;
-            let isVirtualNode = this.isVirtualNode(node);
-            if (node || !isVirtualNode)
+            let isVirtual = this.isVirtualNode(node);
+            if (!isVirtual) {
                 container = document.createDocumentFragment();
-            if (isVirtualNode === true) {
+                if (node)
+                    for (let c in node.childNodes) {
+                        let child = node.childNodes[c];
+                        if (child.cloneNode) {
+                            let clone = child.cloneNode(true);
+                            container.appendChild(clone);
+                        }
+                    }
+            }
+            else {
                 container = {
                     nodeType: sn.vdom.node.ELEMENT,
                     tagName: "DIV",
-                    childNodes: [node]
+                    childNodes: node ? [node] : [],
+                    virtual: true
                 };
-            }
-            else if (node) {
-                for (let c in node.childNodes) {
-                    let child = node.childNodes[c];
-                    if (child.cloneNode) {
-                        let clone = child.cloneNode(true);
-                        container.appendChild(clone);
-                    }
-                }
             }
             return container;
         },
@@ -414,5 +449,4 @@ var sn;
         }
     };
 })(sn || (sn = {}));
-var el = sn.vdom.createVirtualNode;
 //# sourceMappingURL=snapp.js.map
