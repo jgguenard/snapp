@@ -10,6 +10,8 @@
   },
   "files": [
     "snapp.ts",
+    "snapp.component.ts",
+    "snapp.request.ts",
     "snapp.router.ts",
     "snapp.vdom.ts"
   ]

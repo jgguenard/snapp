@@ -117,13 +117,13 @@ namespace sn
             }
 
             // check child nodes
-            operations = operations.concat(this.diff(srcNode, dstNode));
+            operations = operations.concat(this.diffChildren(srcNode, dstNode));
 
             return operations;
         },
 
         // return operations to make children of a source node look like the ones of the destination
-        diff: function(srcNode: Element, dstNode: Element)
+        diffChildren: function(srcNode: Element, dstNode: Element)
         {
             let operations = [];
 
@@ -135,7 +135,7 @@ namespace sn
 
                 let dstChild = dstNode.childNodes[c];
                 let srcChild = srcNode.childNodes[c];
-                
+
                 if(!srcChild)
                 {
                     // add child
@@ -145,13 +145,17 @@ namespace sn
                         node: dstChild
                     });
                 } else if(srcChild.nodeType !== dstChild.nodeType || srcChild["tagName"] || (srcChild["tagName"] !== dstChild["tagName"])) {
-                    // replace child
-                    operations.push({
-                        type: sn.vdom.operation.REPLACE_CHILD,
-                        source: srcNode,
-                        destination: dstChild,
-                        node: srcChild
-                    });
+                    let isComponent = sn.vdom.getAttribute(srcChild, "data-sn-component");
+                    if(!isComponent)
+                    {
+                        // replace child
+                        operations.push({
+                            type: sn.vdom.operation.REPLACE_CHILD,
+                            source: srcNode,
+                            destination: dstChild,
+                            node: srcChild
+                        });
+                    }
                 } else {
                     // compare children
                     operations = operations.concat(this.diffNode(srcChild, dstChild));
@@ -252,7 +256,7 @@ namespace sn
             } else if(node.nodeType === sn.vdom.node.COMPONENT) {
                 // COMPONENT
                 realNode = document.createElement("DIV");
-                sn.mount(realNode, node.tagName);
+                sn.mount(realNode, node.tagName, node.attributes);
             }
             return realNode;
         },
@@ -265,6 +269,12 @@ namespace sn
             if(typeof tagName === "object")
             {
                 // component
+                node = {
+                    nodeType: sn.vdom.node.COMPONENT,
+                    tagName: tagName,
+                    attributes:  attributes,
+                    virtual: true
+                };
             } else {
                 // element
                 node = {
@@ -290,6 +300,7 @@ namespace sn
             return node;
         },
 
+        // create a container for a node and copy its children
         createContainerFromNode: function(node)
         {
             let container;
@@ -308,12 +319,7 @@ namespace sn
                         }
                     }
             } else {
-                container = {
-                    nodeType: sn.vdom.node.ELEMENT,
-                    tagName: "DIV",
-                    childNodes: node ? [node] : [],
-                    virtual: true
-                }
+                container = this.createVirtualNode("DIV", null, node);
             }
 
             return container;
