@@ -8,11 +8,17 @@
     "forceConsistentCasingInFileNames": false,
     "emitDecoratorMetadata": true
   },
+
   "files": [
-    "snapp.ts",
-    "snapp.component.ts",
-    "snapp.request.ts",
-    "snapp.router.ts",
-    "snapp.vdom.ts"
+    "src/sn.vdom.ts",
+    "src/sn.router.ts",
+    "src/sn.component.ts",
+    "src/sn.ts"
+
+    //"snapp.ts",
+    //"snapp.component.ts",
+    //"snapp.request.ts",
+    //"snapp.router.ts",
+    //"snapp.vdom.ts"
   ]
 }

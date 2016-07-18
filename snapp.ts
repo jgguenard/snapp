@@ -20,6 +20,18 @@ namespace sn
             console.log(sn.config.logPrefix + message);
     }
 
+    // is empty
+    export function isEmpty(value: any): boolean
+    {
+        return !sn.isDefined(value) || value === "" || (typeof value === "object" && Object.keys(value).length === 0);
+    }
+
+    // is defined
+    export function isDefined(value: any): boolean
+    {
+        return value !== undefined && value !== null;
+    }
+
     // isInteger
     export function isInteger(value: any) : boolean
     {

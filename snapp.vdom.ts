@@ -125,6 +125,9 @@ namespace sn
         // return operations to make children of a source node look like the ones of the destination
         diffChildren: function(srcNode: Element, dstNode: Element)
         {
+            let mountedComponent = sn.vdom.getAttribute(srcNode, 'data-sn-component');
+            let scope = (mountedComponent) ? mountedComponent.scope : null;
+
             let operations = [];
 
             let dstChildCount = (dstNode.childNodes) ? dstNode.childNodes.length : 0;
@@ -142,6 +145,7 @@ namespace sn
                     operations.push({
                         type: sn.vdom.operation.APPEND_CHILD,
                         source: srcNode,
+                        scope: scope,
                         node: dstChild
                     });
                 } else if(srcChild.nodeType !== dstChild.nodeType || srcChild["tagName"] || (srcChild["tagName"] !== dstChild["tagName"])) {
@@ -152,6 +156,7 @@ namespace sn
                         operations.push({
                             type: sn.vdom.operation.REPLACE_CHILD,
                             source: srcNode,
+                            scope: scope,
                             destination: dstChild,
                             node: srcChild
                         });
@@ -186,12 +191,12 @@ namespace sn
                 switch(operation.type)
                 {
                     case sn.vdom.operation.APPEND_CHILD:
-                        let clone = this.cloneNode(operation.node);
+                        let clone = this.cloneNode(operation.node, operation.scope);
                         operation.source.appendChild(clone);
                         break;
                     case sn.vdom.operation.REPLACE_CHILD:
                         let new_child = (this.isVirtualNode(operation.destination))
-                            ? this.createRealNode(operation.destination)
+                            ? this.createRealNode(operation.destination, operation.scope)
                             : operation.destination;
                         operation.source.replaceChild(new_child, operation.node);
                         break;
@@ -212,12 +217,12 @@ namespace sn
         },
 
         // clone a node (virtual or real)
-        cloneNode: function(node)
+        cloneNode: function(node, scope?)
         {
             if(!node.cloneNode)
             {
                 // virtual node
-                return this.createRealNode(node);
+                return this.createRealNode(node, scope);
             } else {
                 // real node
                 return node.cloneNode(true);
@@ -225,7 +230,7 @@ namespace sn
         },
 
         // convert a virtual node to a real one
-        createRealNode: function(node)
+        createRealNode: function(node, scope?)
         {
             let realNode;
             if(node.nodeType === sn.vdom.node.TEXT)
@@ -235,24 +240,30 @@ namespace sn
             } else if(node.nodeType === sn.vdom.node.ELEMENT) {
                 // DOM ELEMENT
                 realNode = document.createElement(node.tagName);
+
+                // set attributes and events
                 if (node.attributes) {
-                    for (var a = 0; a < node.attributes.length; a++) {
-                        var attr = node.attributes[a];
-                        this.setAttribute(realNode, attr.name, attr.value);
+                    for (let attrName in node.attributes) {
+                        let attrValue = node.attributes[attrName];
+                        if(typeof attrValue === 'function')
+                            attrValue = attrValue.bind(scope);
+                        this.setAttribute(realNode, attrName, attrValue);
                     }
                 }
 
+                // create children
                 if (node.childNodes) {
                     var virtualContainer = document.createDocumentFragment();
                     for (var a = 0; a < node.childNodes.length; a++) {
                         let child = node.childNodes[a];
                         if(child)
-                            virtualContainer.appendChild(this.createRealNode(child));
+                            virtualContainer.appendChild(this.createRealNode(child, realNode));
                     }
                     if (realNode.appendChild) {
                         realNode.appendChild(virtualContainer);
                     }
                 }
+
             } else if(node.nodeType === sn.vdom.node.COMPONENT) {
                 // COMPONENT
                 realNode = document.createElement("DIV");
@@ -276,6 +287,7 @@ namespace sn
                     virtual: true
                 };
             } else {
+
                 // element
                 node = {
                     tagName: tagName.toUpperCase(),
@@ -289,7 +301,7 @@ namespace sn
                     node.childNodes = childNodes;
                 } else if(typeof childNodes === "object") {
                     node.childNodes = [childNodes];
-                } else {
+                } else if(sn.isDefined(childNodes)) {
                     node.childNodes = [{
                         nodeType: sn.vdom.node.TEXT,
                         textContent: childNodes,
@@ -297,6 +309,7 @@ namespace sn
                     }];
                 }
             }
+
             return node;
         },
 
@@ -332,3 +345,5 @@ namespace sn
         }
     }
 }
+
+var el = sn.vdom.createVirtualNode;

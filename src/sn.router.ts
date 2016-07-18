@@ -53,10 +53,10 @@ namespace sn
                     }
                     this.params = params;
                     this.named_params = named_params;
-                    // log
-                    sn.log("Taking route " + rule);
                     // execute route
                     setTimeout(() => {
+                        // log
+                        sn.log("Taking route " + rule);
                         this.routes[rule]();
                     }, 0);
                     break;
@@ -68,11 +68,9 @@ namespace sn
         {
             if(enabled === true && !this.enabled)
             {
-                //setTimeout(() => {
-                    window.addEventListener("hashchange", this.update.bind(this));
-                    this.enabled = true;
-                    this.update();
-                //}, 0);
+                window.addEventListener("hashchange", this.update.bind(this));
+                this.enabled = true;
+                this.update();
             } else if(!enabled) {
                 window.removeEventListener("hashchange", this.update.bind(this));
                 this.enabled = false;
