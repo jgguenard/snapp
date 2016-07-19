@@ -109,7 +109,6 @@ namespace sn
 
             // 1. check current attributes
             let currentAttrs = currentNode.attributes || [];
-
             let desiredAttrs = desiredNode.attributes|| [];
 
             // 2. check desired attributes
@@ -181,21 +180,32 @@ namespace sn
                 if(!currentChild)
                 {
                     // add child
+                    if(!sn.isEmpty(desiredChild))
+                    {
+                        operations.push({
+                            type: sn.vdom.operation.APPEND_CHILD,
+                            target: currentNode,
+                            child: desiredChild
+                        });
+                    }
+                } else if(sn.isEmpty(desiredChild)) {
+                    // remove child
                     operations.push({
-                        type: sn.vdom.operation.APPEND_CHILD,
+                        type: sn.vdom.operation.REMOVE_CHILD,
                         target: currentNode,
-                        child: desiredChild
+                        child: currentNode.childNodes[c],
                     });
                 } else if(currentChild.nodeType !== desiredChild.nodeType || currentChild["tagName"] !== desiredChild["tagName"]) {
-
-                    // replace child
-                    operations.push({
-                        type: sn.vdom.operation.REPLACE_CHILD,
-                        target: currentNode,
-                        child: desiredChild,
-                        oldChild: currentChild
-                    });
-
+                    if(desiredChild.nodeType !== sn.vdom.node.COMPONENT) // ignore nested components
+                    {
+                        // replace child
+                        operations.push({
+                            type: sn.vdom.operation.REPLACE_CHILD,
+                            target: currentNode,
+                            child: desiredChild,
+                            oldChild: currentChild
+                        });
+                    }
                 } else {
                     // compare children
                     operations = operations.concat(this.diff(currentChild, desiredChild));

@@ -139,6 +139,7 @@ namespace sn
                 let dstChild = dstNode.childNodes[c];
                 let srcChild = srcNode.childNodes[c];
 
+                if(!is)
                 if(!srcChild)
                 {
                     // add child

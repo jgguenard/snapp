@@ -148,19 +148,30 @@ var sn;
                 let desiredChild = desiredNode.childNodes[c];
                 let currentChild = (currentNode.childNodes) ? currentNode.childNodes[c] : null;
                 if (!currentChild) {
+                    if (!sn.isEmpty(desiredChild)) {
+                        operations.push({
+                            type: sn.vdom.operation.APPEND_CHILD,
+                            target: currentNode,
+                            child: desiredChild
+                        });
+                    }
+                }
+                else if (sn.isEmpty(desiredChild)) {
                     operations.push({
-                        type: sn.vdom.operation.APPEND_CHILD,
+                        type: sn.vdom.operation.REMOVE_CHILD,
                         target: currentNode,
-                        child: desiredChild
+                        child: currentNode.childNodes[c],
                     });
                 }
                 else if (currentChild.nodeType !== desiredChild.nodeType || currentChild["tagName"] !== desiredChild["tagName"]) {
-                    operations.push({
-                        type: sn.vdom.operation.REPLACE_CHILD,
-                        target: currentNode,
-                        child: desiredChild,
-                        oldChild: currentChild
-                    });
+                    if (desiredChild.nodeType !== sn.vdom.node.COMPONENT) {
+                        operations.push({
+                            type: sn.vdom.operation.REPLACE_CHILD,
+                            target: currentNode,
+                            child: desiredChild,
+                            oldChild: currentChild
+                        });
+                    }
                 }
                 else {
                     operations = operations.concat(this.diff(currentChild, desiredChild));
@@ -320,40 +331,82 @@ var sn;
 })(sn || (sn = {}));
 var sn;
 (function (sn) {
-    sn.componentLifeCycle = ["init", "render", "dispose"];
+    sn.component = {
+        lifeCycle: ["init", "update", "render", "dispose"],
+        abortComponentRendering: function (component) {
+            if (component.$pendingRendering) {
+                sn.log("Ignoring rendering request of component <" + component.definition.name + ">");
+                clearTimeout(component.$pendingRendering);
+            }
+        },
+        requestComponentRendering: function (component) {
+            this.abortComponentRendering(component);
+            component.$pendingRendering = setTimeout(() => {
+                component.render();
+                component.$pendingRendering = null;
+            }, 0);
+        },
+        propertyChanged: function (component, prop) {
+            sn.log("Rendering component <" + component.definition.name + "> triggered by <" + component.definition.name + "::" + prop.toString() + ">");
+            this.requestComponentRendering(component);
+        }
+    };
     class Component {
         constructor(definition) {
             this.definition = definition;
             this.observables = [];
+            let $component = this;
             this.scope = new Proxy({}, {
                 get: function (obj, prop) {
+                    if (sn.isDefined(obj[prop]) && !sn.isFunction(obj[prop]) && !sn.inArray($component.observables, prop)) {
+                        sn.log("Observing property <" + $component.definition.name + "." + prop.toString() + ">");
+                        $component.observables.push(prop);
+                    }
                     return obj[prop];
                 },
                 set: function (obj, prop, value) {
                     obj[prop] = value;
+                    if (!sn.isFunction(value) && sn.inArray($component.observables, prop))
+                        sn.component.propertyChanged($component, prop);
                     return true;
                 }
             });
         }
-        mount(container, initArguments) {
+        mount(container, ctrlArguments) {
             sn.log("Mounting component <" + this.definition.name + ">");
+            let mountedComponent = sn.vdom.getAttribute(container, "data-sn-component");
+            if (sn.isDefined(mountedComponent))
+                mountedComponent.dispose();
+            sn.vdom.setAttribute(container, "data-sn-component", this);
             this.container = container;
             for (let p in this.definition)
-                if (typeof this.definition[p] == "function" && sn.componentLifeCycle.indexOf(p) < 0)
+                if (typeof this.definition[p] == "function" && sn.component.lifeCycle.indexOf(p) < 0)
                     this.scope[p] = this.definition[p];
-            if (this.definition.init) {
-                if (initArguments) {
+            this.init(ctrlArguments);
+            this.update(ctrlArguments);
+            sn.log("Component <" + this.definition.name + "> mounted");
+        }
+        controller(ctrl, ctrlArgs) {
+            if (this.definition[ctrl]) {
+                if (arguments) {
                     let args = [];
-                    for (let key in initArguments)
-                        args.push(initArguments[key]);
-                    this.definition.init.apply(this.scope, args);
+                    for (let key in ctrlArgs)
+                        args.push(ctrlArgs[key]);
+                    this.definition[ctrl].apply(this.scope, args);
                 }
                 else {
-                    this.definition.init.call(this.scope);
+                    this.definition[ctrl].call(this.scope);
                 }
             }
-            this.render();
-            sn.log("Component <" + this.definition.name + "> mounted");
+        }
+        init(ctrlArguments) {
+            this.controller("init", ctrlArguments);
+            sn.log("Component <" + this.definition.name + "> initialized");
+        }
+        update(ctrlArguments) {
+            this.controller("update", ctrlArguments);
+            sn.component.requestComponentRendering(this);
+            sn.log("Component <" + this.definition.name + "> updated");
         }
         render() {
             if (this.definition.render) {
@@ -365,6 +418,7 @@ var sn;
             }
         }
         dispose() {
+            sn.component.abortComponentRendering(this);
             if (this.definition.dispose)
                 this.definition.dispose.call(this.scope);
             sn.log("Component <" + this.definition.name + "> unmounted");
@@ -374,15 +428,113 @@ var sn;
 })(sn || (sn = {}));
 var sn;
 (function (sn) {
+    class RequestObject {
+        constructor(method, url, data, options) {
+            this.url = url;
+            this.method = method;
+            this.data = data;
+            this.options = sn.extend({
+                timeout: 5000,
+                async: true,
+                withCredentials: false,
+                ct: 'application/x-www-form-urlencoded'
+            }, options || {});
+            this.init();
+        }
+        abort() {
+            this.xhr.abort();
+            if (this.failCallback)
+                this.failCallback(this.xhr.status);
+            if (this.alwaysCallback)
+                this.alwaysCallback();
+        }
+        init() {
+            try {
+                this.xhr = new XMLHttpRequest();
+            }
+            catch (e) {
+                try {
+                    this.xhr = new ActiveXObject("Msxml2.XMLHTTP");
+                }
+                catch (e) {
+                    sn.error("XMLHttpRequest not supported");
+                    return null;
+                }
+            }
+            if (this.xhr["withCredentials"])
+                this.xhr.withCredentials = this.options.withCredentials;
+            this.xhr.onreadystatechange = () => {
+                if (this.xhr.readyState != 4)
+                    return;
+                clearTimeout(this.requestTimeout);
+                if (this.xhr.status != 200) {
+                    if (this.failCallback)
+                        this.failCallback(this.xhr.responseText, this.xhr);
+                }
+                else {
+                    if (this.successCallback)
+                        this.successCallback(this.xhr.responseText, this.xhr);
+                }
+                if (this.alwaysCallback)
+                    this.alwaysCallback(this.xhr.responseText, this.xhr);
+            };
+            this.requestTimeout = setTimeout(() => {
+                this.abort();
+            }, this.options.timeout);
+            this.xhr.open(this.method.toUpperCase(), this.url, this.options.async);
+            if (this.data) {
+                this.xhr.setRequestHeader('Content-type', this.options.ct);
+                this.xhr.send(this.data);
+            }
+            else {
+                this.xhr.send(null);
+            }
+        }
+        success(callback) {
+            this.successCallback = callback;
+            return this;
+        }
+        fail(callback) {
+            this.failCallback = callback;
+            return this;
+        }
+        always(callback) {
+            this.alwaysCallback = callback;
+            return this;
+        }
+    }
+    sn.RequestObject = RequestObject;
+    sn.request = {
+        get: function (url, data, options) {
+            return new sn.RequestObject("GET", url, data, options);
+        },
+        post: function (url, data, options) {
+            return new sn.RequestObject("POST", url, data, options);
+        }
+    };
+})(sn || (sn = {}));
+var sn;
+(function (sn) {
     sn.config = {
         logPrefix: "sn: ",
         debug: true
     };
+    function error(message) {
+        if (sn.config.debug === true)
+            throw new Error(sn.config.logPrefix + message);
+    }
+    sn.error = error;
     function log(message) {
         if (sn.config.debug === true)
             console.log(sn.config.logPrefix + message);
     }
     sn.log = log;
+    function extend(obj1, obj2) {
+        if (Object.assign)
+            return Object.assign(obj1, obj2);
+        return obj1;
+    }
+    sn.extend = extend;
     function isObject(value) {
         return (typeof value === "object");
     }
@@ -395,6 +547,14 @@ var sn;
         return value !== undefined && value !== null;
     }
     sn.isDefined = isDefined;
+    function isFunction(value) {
+        return (typeof value === "function");
+    }
+    sn.isFunction = isFunction;
+    function inArray(arr, value) {
+        return arr.indexOf(value) >= 0;
+    }
+    sn.inArray = inArray;
     function isInteger(value) {
         let x;
         return isNaN(value) ? !1 : (x = parseFloat(value), (0 | x) === x);
@@ -405,8 +565,14 @@ var sn;
     }
     sn.isEmpty = isEmpty;
     function mount(container, componentDefinition, initArguments) {
-        let component = new sn.Component(componentDefinition);
-        component.mount(container, initArguments);
+        let mountedComponent = sn.vdom.getAttribute(container, "data-sn-component");
+        if (mountedComponent && mountedComponent.definition === componentDefinition) {
+            mountedComponent.update(initArguments);
+        }
+        else {
+            let component = new sn.Component(componentDefinition);
+            component.mount(container, initArguments);
+        }
     }
     sn.mount = mount;
 })(sn || (sn = {}));
