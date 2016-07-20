@@ -24,7 +24,10 @@ namespace sn
         // change value of a DOM attribute
         setAttribute: function(node, name, value)
         {
-            if (name === 'class') {
+            if(node.$virtual === true)
+            {
+                node.attributes[name] = value;
+            } else if (name === 'class') {
                 node.className = value;
             } else if (name === 'style') {
                 node.style.cssText = value;
@@ -33,14 +36,17 @@ namespace sn
             } else if (node.setAttribute) {
                 node.setAttribute(name, value);
             } else if (node.attributes) {
-                node.attributes[name] = value;
+                node.attributes[name].value = value;
             }
         },
 
         // get value of a DOM attribute
         getAttribute: function(node, name)
         {
-            if (name === 'class') {
+            if(node.$virtual === true)
+            {
+                return node.attributes[name];
+            } else if (name === 'class') {
                 return node.className;
             } else if (name === 'style') {
                 return node.style.cssText;
@@ -49,7 +55,7 @@ namespace sn
             } else if (node.getAttribute) {
                 return node.getAttribute(name);
             } else if (node.attributes) {
-                return node.attributes[name];
+                return node.attributes[name].value;
             }
             return null;
         },
@@ -57,7 +63,10 @@ namespace sn
         // remove/claer a DOM attribute
         removeAttribute: function(node, name)
         {
-            if (name === 'class') {
+            if(node.$virtual === true)
+            {
+                delete node.attributes[name];
+            } else if (name === 'class') {
                 node.className = '';
             } else if (name === 'style') {
                 node.style.cssText = '';
@@ -139,6 +148,7 @@ namespace sn
 
                 // check desired attributes
                 for (let desiredAttr in desiredAttrs) {
+
                     let found = false;
                     for (let a = 0; a < currentAttrs.length; a++) {
                         if(currentAttrs[a].name === desiredAttr)
@@ -147,7 +157,9 @@ namespace sn
                             break;
                         }
                     }
+
                     if (!found) {
+
                         let desiredAttrValue = this.getAttribute(desiredNode, desiredAttr);
                         operations.push({
                             type: sn.vdom.operation.SET_ATTRIBUTE,
@@ -278,7 +290,7 @@ namespace sn
         },
 
         // create a virtual node from parameters
-        createVirtualNode: function(tagName: string, attributes?, childrenOrValue?)
+        createVirtualNode: function(tagName: string | Object, attributes?, childrenOrValue?)
         {
             let node = null;
 
@@ -301,7 +313,7 @@ namespace sn
 
                 // dom element
                 node = {
-                    tagName: tagName.toUpperCase(),
+                    tagName: tagName.toString().toUpperCase(),
                     nodeType: sn.vdom.node.ELEMENT,
                     attributes:  attributes
                 };
@@ -319,6 +331,8 @@ namespace sn
                     }];
                 }
             }
+
+            node.$virtual = true;
 
             return node;
         }

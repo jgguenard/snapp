@@ -94,13 +94,4 @@ namespace sn
         }
 
     }
-
-    // change property of a scope upon input events (TEMPORARY, TO IMPROVE)
-    export function bind(prop, scope)
-    {
-        return function(event)
-        {
-            scope[prop] = event.target.value;
-        }
-    }
 }

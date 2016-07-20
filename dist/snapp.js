@@ -17,7 +17,10 @@ var sn;
             COMPONENT: 99
         },
         setAttribute: function (node, name, value) {
-            if (name === 'class') {
+            if (node.$virtual === true) {
+                node.attributes[name] = value;
+            }
+            else if (name === 'class') {
                 node.className = value;
             }
             else if (name === 'style') {
@@ -30,11 +33,14 @@ var sn;
                 node.setAttribute(name, value);
             }
             else if (node.attributes) {
-                node.attributes[name] = value;
+                node.attributes[name].value = value;
             }
         },
         getAttribute: function (node, name) {
-            if (name === 'class') {
+            if (node.$virtual === true) {
+                return node.attributes[name];
+            }
+            else if (name === 'class') {
                 return node.className;
             }
             else if (name === 'style') {
@@ -47,12 +53,15 @@ var sn;
                 return node.getAttribute(name);
             }
             else if (node.attributes) {
-                return node.attributes[name];
+                return node.attributes[name].value;
             }
             return null;
         },
         removeAttribute: function (node, name) {
-            if (name === 'class') {
+            if (node.$virtual === true) {
+                delete node.attributes[name];
+            }
+            else if (name === 'class') {
                 node.className = '';
             }
             else if (name === 'style') {
@@ -241,7 +250,7 @@ var sn;
             }
             else {
                 node = {
-                    tagName: tagName.toUpperCase(),
+                    tagName: tagName.toString().toUpperCase(),
                     nodeType: sn.vdom.node.ELEMENT,
                     attributes: attributes
                 };
@@ -258,6 +267,7 @@ var sn;
                         }];
                 }
             }
+            node.$virtual = true;
             return node;
         }
     };
@@ -353,9 +363,21 @@ var sn;
                 component.$pendingRendering = null;
             }, 0);
         },
-        propertyChanged: function (component, prop) {
-            sn.log("Rendering component <" + component.definition.name + "> triggered by <" + prop.toString() + ">");
+        observablePropertyChanged: function (component, scopeID, scope, prop, newValue, oldValue) {
+            sn.log("Rendering component <" + component.definition.name +
+                "> triggered by <" + prop.toString() + "> of scope <!" + scopeID + ">");
             this.requestComponentRendering(component);
+            let observers = (scope.$observers) ? scope.$observers[prop] : null;
+            if (observers)
+                for (let o in observers)
+                    observers[o](newValue, oldValue);
+        },
+        observe: function (prop, scope, callback) {
+            if (!scope.$observers)
+                scope.$observers = {};
+            if (!scope.$observers[prop])
+                scope.$observers[prop] = [];
+            scope.$observers[prop].push(callback);
         }
     };
     class Component {
@@ -383,11 +405,12 @@ var sn;
                 },
                 set: function (obj, prop, value) {
                     let propID = scopeID + prop.toString();
+                    let oldValue = obj[prop];
                     if (typeof value === "object")
                         value = component.createScope(value);
                     obj[prop] = value;
-                    if (!sn.isFunction(value) && sn.inArray(component.observables, propID))
-                        sn.component.propertyChanged(component, propID);
+                    if ((value !== oldValue) && !sn.isFunction(value) && sn.inArray(component.observables, propID))
+                        sn.component.observablePropertyChanged(component, scopeID, obj, prop, value, oldValue);
                     return true;
                 }
             });
@@ -543,6 +566,56 @@ var sn;
 })(sn || (sn = {}));
 var sn;
 (function (sn) {
+    sn.FormField = {
+        name: "FormField",
+        init: function (form, name, attributes, options) {
+            this.value = form[name] || "";
+            sn.component.observe(name, form, (newValue, oldValue) => {
+                this.value = newValue;
+            });
+        },
+        update: function (form, name, attributes, options) {
+            this.form = form;
+            this.attributes = sn.extend({
+                name: name,
+                onchange: (event) => {
+                    let value = event.target.value;
+                    this.form.$errors[name] = this.form.validateField(name, value);
+                    this.value = value;
+                    this.form.setFieldValue(name, value);
+                    this.form.$pristine = false;
+                }
+            }, attributes || {});
+        },
+        render: function () {
+            var attributes = sn.extend({}, this.attributes);
+            let css_classes = (!sn.isEmpty(attributes["class"] || "")) ? " " : "";
+            if (!sn.isEmpty(this.form.$errors[attributes.name])) {
+                css_classes += "sn-invalid";
+                this.form.$errors[attributes.name].map((item) => {
+                    css_classes += " sn-invalid-" + item.replace("_", "-");
+                });
+            }
+            else {
+                css_classes += "sn-valid";
+            }
+            attributes["class"] = css_classes;
+            let tagName = (this.options) ? "select" : (attributes.multiline === true) ? "textarea" : "input";
+            switch (tagName) {
+                case "select":
+                    break;
+                case "input":
+                    if (!attributes.type)
+                        attributes.type = "text";
+                    break;
+                case "textarea":
+                    delete attributes["multiline"];
+                    break;
+            }
+            attributes.value = this.value;
+            return el(tagName, attributes);
+        }
+    };
     class Form {
         constructor(rules) {
             this.$rules = rules || {};
@@ -558,7 +631,10 @@ var sn;
         isPristine() {
             return this.$pristine;
         }
-        validateField(fieldName) {
+        setFieldValue(name, value) {
+            this[name] = value;
+        }
+        validateField(fieldName, fieldValue) {
             let errors = [];
             let rules = this.$rules[fieldName];
             if (!sn.isEmpty(rules)) {
@@ -566,7 +642,7 @@ var sn;
                     rules = [rules];
                 for (let r in rules) {
                     let validator = rules[r];
-                    let assertion = sn.validation[validator](this[fieldName]);
+                    let assertion = sn.validation[validator](fieldValue);
                     if (assertion !== true)
                         errors.push(validator);
                 }
@@ -574,34 +650,7 @@ var sn;
             return errors;
         }
         field(name, attributes, options) {
-            attributes = sn.extend({
-                name: name,
-                value: this[name] || "",
-                onchange: (event) => {
-                    let value = event.target.value;
-                    this[name] = value;
-                    this.$errors[name] = this.validateField(name);
-                    this.$pristine = false;
-                }
-            }, options || {});
-            let tagName = (options) ? "select" : (attributes.multiline === true) ? "textarea" : "input";
-            switch (tagName) {
-                case "select":
-                    break;
-                case "input":
-                    if (!attributes.type)
-                        attributes.type = "text";
-                    break;
-                case "textarea":
-                    delete attributes["multiline"];
-                    break;
-            }
-            return {
-                name: "FormField",
-                render: function () {
-                    return el(tagName, attributes);
-                }
-            };
+            return el(sn.FormField, { form: this, name: name, attributes: attributes, options: options });
         }
     }
     sn.Form = Form;
@@ -675,11 +724,5 @@ var sn;
         }
     }
     sn.mount = mount;
-    function bind(prop, scope) {
-        return function (event) {
-            scope[prop] = event.target.value;
-        };
-    }
-    sn.bind = bind;
 })(sn || (sn = {}));
 //# sourceMappingURL=snapp.js.map

@@ -1,5 +1,91 @@
 namespace sn
 {
+    export var FormField = {
+
+        name: "FormField",
+
+        init: function(form, name, attributes?, options?)
+        {
+            // set initial value if any
+            this.value = form[name] || "";
+
+            sn.component.observe(name, form, (newValue, oldValue) => {
+                this.value = newValue;
+            });
+        },
+
+        update: function(form, name, attributes?, options?)
+        {
+            // save reference to parent form
+            this.form = form;
+
+            // set attributes
+            this.attributes = sn.extend({
+
+                // name of the field
+                name: name,
+
+                // when value change
+                onchange: (event) => {
+                    // get value
+                    let value = event.target.value;
+                    // validate it
+                    this.form.$errors[name] = this.form.validateField(name, value);
+                    // save value to current scope
+                    this.value = value;
+                    // save value to form scope
+                    this.form.setFieldValue(name, value);
+                    // form is no longer considered pristine
+                    this.form.$pristine = false;
+                }
+
+            }, attributes || {});
+        },
+
+        render: function() {
+
+            // make a copy of the base attributes
+            var attributes = sn.extend({}, this.attributes);
+
+            // set css class attribute
+            let css_classes = (!sn.isEmpty(attributes["class"] || "")) ? " " : "";
+            if(!sn.isEmpty(this.form.$errors[attributes.name]))
+            {
+                css_classes += "sn-invalid";
+                this.form.$errors[attributes.name].map((item) => {
+                    css_classes += " sn-invalid-" + item.replace("_", "-");
+                });
+            } else {
+                css_classes += "sn-valid";
+            }
+            attributes["class"] = css_classes;
+
+            // set tag name
+            let tagName = (this.options) ? "select" : (attributes.multiline === true) ? "textarea" : "input";
+
+            // tagName-based adjustments
+            switch(tagName)
+            {
+                case "select":
+                    // TODO ...
+                    break;
+                case "input":
+                    if(!attributes.type)
+                        attributes.type = "text";
+                    break;
+                case "textarea":
+                    delete attributes["multiline"];
+                    break;
+            }
+
+            // make sure the value attribute is synched with the field model
+            attributes.value = this.value;
+
+            // return element
+            return el(tagName, attributes);
+        }
+    }
+
     export class Form
     {
         private $rules;
@@ -28,8 +114,13 @@ namespace sn
             return this.$pristine;
         }
 
+        setFieldValue(name, value)
+        {
+            this[name] = value;
+        }
+
         // validate a field
-        validateField(fieldName)
+        validateField(fieldName, fieldValue)
         {
             let errors = [];
             let rules = this.$rules[fieldName];
@@ -41,7 +132,7 @@ namespace sn
                 for(let r in rules)
                 {
                     let validator = rules[r];
-                    let assertion = sn.validation[validator](this[fieldName]);
+                    let assertion = sn.validation[validator](fieldValue);
                     if(assertion !== true)
                         errors.push(validator);
                 }
@@ -52,56 +143,7 @@ namespace sn
         // return a field component
         field(name, attributes?, options?)
         {
-            // attributes
-            attributes = sn.extend({
-
-                // name of the field
-                name: name,
-
-                // initial value
-                value: this[name] || "",
-
-                // when value change
-                onchange: (event) => {
-                    // get value
-                    let value = event.target.value;
-                    // save value to scope
-                    this[name] = value;
-                    // validate it
-                    this.$errors[name] = this.validateField(name);
-                    // form is no longer considered pristine
-                    this.$pristine = false;
-                }
-
-            }, options || {});
-
-            // element type
-            let tagName = (options) ? "select" : (attributes.multiline === true) ? "textarea" : "input";
-
-            // tag name
-            switch(tagName)
-            {
-                case "select":
-                    // TODO ...
-                    break;
-                case "input":
-                    if(!attributes.type)
-                        attributes.type = "text";
-                    break;
-                case "textarea":
-                    delete attributes["multiline"];
-                    break;
-            }
-
-            // a field is a dynamically generated component
-            return {
-
-                name: "FormField",
-
-                render: function() {
-                    return el(tagName, attributes);
-                }
-            }
+            return el(sn.FormField, { form: this, name: name, attributes: attributes, options: options });
         }
     }
 }

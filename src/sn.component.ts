@@ -29,11 +29,28 @@ namespace sn
         },
 
         // property change manager
-        propertyChanged: function(component, prop)
+        observablePropertyChanged: function(component, scopeID, scope, prop, newValue, oldValue)
         {
-            sn.log("Rendering component <" + component.definition.name + "> triggered by <" + prop.toString() + ">");
+            sn.log("Rendering component <" + component.definition.name +
+                "> triggered by <" + prop.toString() + "> of scope <!" + scopeID + ">");
+
             // request rendering of component
             this.requestComponentRendering(component);
+
+            // notify observers
+            let observers = (scope.$observers) ? scope.$observers[prop] : null;
+            if(observers)
+                for(let o in observers)
+                    observers[o](newValue, oldValue);
+        },
+
+        observe: function(prop, scope, callback)
+        {
+            if(!scope.$observers)
+                scope.$observers = {}
+            if(!scope.$observers[prop])
+                scope.$observers[prop] = [];
+            scope.$observers[prop].push(callback);
         }
     }
 
@@ -63,6 +80,7 @@ namespace sn
             let component = this;
             let scopeID = sn.guid();
             return new Proxy(initialData || {}, {
+
                 // getter
                 get: function (obj, prop) {
                     let propID = scopeID + prop.toString();
@@ -82,14 +100,15 @@ namespace sn
                 // setter
                 set: function (obj, prop, value): boolean {
                     let propID = scopeID + prop.toString();
+                    let oldValue = obj[prop];
                     // create scope for inner objects because Proxy is limited to its direct elements
                     if(typeof value === "object")
                         value = component.createScope(value);
                     // save change
                     obj[prop] = value;
                     // notify property change
-                    if(!sn.isFunction(value) && sn.inArray(component.observables, propID))
-                        sn.component.propertyChanged(component, propID);
+                    if((value !== oldValue) && !sn.isFunction(value) && sn.inArray(component.observables, propID))
+                        sn.component.observablePropertyChanged(component, scopeID, obj, prop, value, oldValue);
                     return true;
                 }
             });
