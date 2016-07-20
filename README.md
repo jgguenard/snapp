@@ -19,6 +19,10 @@ A module to render forms
 
 A module to make AJAX requests 
 
+### router
+
+A module to manage application states with URL segments
+
 ### validation
 
 A module to validate data, mainly used for form fields
