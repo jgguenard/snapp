@@ -14,6 +14,8 @@
     "src/sn.router.ts",
     "src/sn.component.ts",
     "src/sn.request.ts",
+    "src/sn.validation.ts",
+    "src/sn.form.ts",
     "src/sn.ts"
   ]
 }

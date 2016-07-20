@@ -46,8 +46,8 @@ var sn;
             else if (node.getAttribute) {
                 return node.getAttribute(name);
             }
-            else if (node.attributes && node.attributes[name]) {
-                return node.attributes[name].value;
+            else if (node.attributes) {
+                return node.attributes[name];
             }
             return null;
         },
@@ -68,15 +68,15 @@ var sn;
                 delete node.attributes[name];
             }
         },
-        patch: function (operations) {
+        patch: function (operations, scope) {
             for (let o in operations) {
                 let operation = operations[o];
                 switch (operation.type) {
                     case sn.vdom.operation.APPEND_CHILD:
-                        operation.target.appendChild(this.createRealNode(operation.child));
+                        operation.target.appendChild(this.createRealNode(operation.child, scope));
                         break;
                     case sn.vdom.operation.REPLACE_CHILD:
-                        operation.target.replaceChild(this.createRealNode(operation.child), operation.oldChild);
+                        operation.target.replaceChild(this.createRealNode(operation.child, scope), operation.oldChild);
                         break;
                     case sn.vdom.operation.REMOVE_CHILD:
                         operation.target.removeChild(operation.child);
@@ -96,7 +96,7 @@ var sn;
         diff: function (currentNode, desiredNode, ignoreAttribute) {
             let operations = [];
             let currentAttrs = currentNode.attributes || [];
-            let desiredAttrs = desiredNode.attributes || [];
+            let desiredAttrs = desiredNode.attributes || {};
             if (!ignoreAttribute) {
                 for (let a = 0; a < currentAttrs.length; a++) {
                     let currentAttr = currentAttrs[a];
@@ -119,15 +119,20 @@ var sn;
                         });
                     }
                 }
-                for (let a = 0; a < desiredAttrs.length; a++) {
-                    let desiredAttr = desiredAttrs[a];
-                    let currentAttr = currentAttrs[desiredAttr.name];
-                    if (!currentAttr) {
-                        let desiredAttrValue = this.getAttribute(desiredNode, desiredAttr.name);
+                for (let desiredAttr in desiredAttrs) {
+                    let found = false;
+                    for (let a = 0; a < currentAttrs.length; a++) {
+                        if (currentAttrs[a].name === desiredAttr) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        let desiredAttrValue = this.getAttribute(desiredNode, desiredAttr);
                         operations.push({
                             type: sn.vdom.operation.SET_ATTRIBUTE,
                             target: currentNode,
-                            name: desiredAttr.name,
+                            name: desiredAttr,
                             value: desiredAttrValue
                         });
                     }
@@ -188,7 +193,7 @@ var sn;
             }
             return operations;
         },
-        createRealNode: function (node) {
+        createRealNode: function (node, scope) {
             let realNode;
             if (node.nodeType === sn.vdom.node.TEXT) {
                 realNode = document.createTextNode(node.textContent);
@@ -198,6 +203,8 @@ var sn;
                 if (node.attributes) {
                     for (let attrName in node.attributes) {
                         let attrValue = node.attributes[attrName];
+                        if (typeof attrValue === 'function')
+                            attrValue = attrValue.bind(scope);
                         this.setAttribute(realNode, attrName, attrValue);
                     }
                 }
@@ -206,7 +213,7 @@ var sn;
                     for (var a = 0; a < node.childNodes.length; a++) {
                         let child = node.childNodes[a];
                         if (child)
-                            virtualContainer.appendChild(this.createRealNode(child, realNode));
+                            virtualContainer.appendChild(this.createRealNode(child, scope));
                     }
                     if (realNode.appendChild) {
                         realNode.appendChild(virtualContainer);
@@ -321,7 +328,7 @@ var sn;
             this.routes = routes;
             this.setEnabled(true);
         },
-        redirect: function (path, args) {
+        route: function (path, args) {
             if (args)
                 for (let a in args)
                     path = path.replace(":" + a, encodeURIComponent(args[a]));
@@ -347,7 +354,7 @@ var sn;
             }, 0);
         },
         propertyChanged: function (component, prop) {
-            sn.log("Rendering component <" + component.definition.name + "> triggered by <" + component.definition.name + "::" + prop.toString() + ">");
+            sn.log("Rendering component <" + component.definition.name + "> triggered by <" + prop.toString() + ">");
             this.requestComponentRendering(component);
         }
     };
@@ -356,18 +363,31 @@ var sn;
             this.definition = definition;
             this.observables = [];
             let $component = this;
-            this.scope = new Proxy({}, {
+            this.scope = this.createScope();
+        }
+        createScope(initialData) {
+            let component = this;
+            let scopeID = sn.guid();
+            return new Proxy(initialData || {}, {
                 get: function (obj, prop) {
-                    if (sn.isDefined(obj[prop]) && !sn.isFunction(obj[prop]) && !sn.inArray($component.observables, prop)) {
-                        sn.log("Observing property <" + $component.definition.name + "." + prop.toString() + ">");
-                        $component.observables.push(prop);
+                    let propID = scopeID + prop.toString();
+                    if (sn.isDefined(obj[prop]) &&
+                        !sn.isFunction(obj[prop]) &&
+                        prop !== "__proto__" &&
+                        !prop.toString().startsWith("$") &&
+                        !sn.inArray(component.observables, propID)) {
+                        sn.log("Observing property <" + prop.toString() + "> of scope <" + scopeID + ">");
+                        component.observables.push(propID);
                     }
                     return obj[prop];
                 },
                 set: function (obj, prop, value) {
+                    let propID = scopeID + prop.toString();
+                    if (typeof value === "object")
+                        value = component.createScope(value);
                     obj[prop] = value;
-                    if (!sn.isFunction(value) && sn.inArray($component.observables, prop))
-                        sn.component.propertyChanged($component, prop);
+                    if (!sn.isFunction(value) && sn.inArray(component.observables, propID))
+                        sn.component.propertyChanged(component, propID);
                     return true;
                 }
             });
@@ -413,7 +433,7 @@ var sn;
                 let desiredContent = this.definition.render.call(this.scope);
                 let desiredView = sn.vdom.createVirtualNode(this.container.tagName, null, desiredContent);
                 let operations = sn.vdom.diff(this.container, desiredView, true);
-                sn.vdom.patch(operations);
+                sn.vdom.patch(operations, this.scope);
                 sn.log("Component <" + this.definition.name + "> rendered");
             }
         }
@@ -515,6 +535,79 @@ var sn;
 })(sn || (sn = {}));
 var sn;
 (function (sn) {
+    sn.validation = {
+        required: function (value) {
+            return !sn.isEmpty(value);
+        }
+    };
+})(sn || (sn = {}));
+var sn;
+(function (sn) {
+    class Form {
+        constructor(rules) {
+            this.$rules = rules || {};
+            this.$errors = {};
+            this.$pristine = true;
+        }
+        isValid() {
+            for (let e in this.$errors)
+                if (!sn.isEmpty(this.$errors[e]))
+                    return false;
+            return true;
+        }
+        isPristine() {
+            return this.$pristine;
+        }
+        validateField(fieldName) {
+            let errors = [];
+            let rules = this.$rules[fieldName];
+            if (!sn.isEmpty(rules)) {
+                if (!sn.isArray(rules))
+                    rules = [rules];
+                for (let r in rules) {
+                    let validator = rules[r];
+                    let assertion = sn.validation[validator](this[fieldName]);
+                    if (assertion !== true)
+                        errors.push(validator);
+                }
+            }
+            return errors;
+        }
+        field(name, attributes, options) {
+            attributes = sn.extend({
+                name: name,
+                value: this[name] || "",
+                onchange: (event) => {
+                    let value = event.target.value;
+                    this[name] = value;
+                    this.$errors[name] = this.validateField(name);
+                    this.$pristine = false;
+                }
+            }, options || {});
+            let tagName = (options) ? "select" : (attributes.multiline === true) ? "textarea" : "input";
+            switch (tagName) {
+                case "select":
+                    break;
+                case "input":
+                    if (!attributes.type)
+                        attributes.type = "text";
+                    break;
+                case "textarea":
+                    delete attributes["multiline"];
+                    break;
+            }
+            return {
+                name: "FormField",
+                render: function () {
+                    return el(tagName, attributes);
+                }
+            };
+        }
+    }
+    sn.Form = Form;
+})(sn || (sn = {}));
+var sn;
+(function (sn) {
     sn.config = {
         logPrefix: "sn: ",
         debug: true
@@ -560,8 +653,15 @@ var sn;
         return isNaN(value) ? !1 : (x = parseFloat(value), (0 | x) === x);
     }
     sn.isInteger = isInteger;
+    function guid() {
+        function s4() {
+            return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+        }
+        return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
+    }
+    sn.guid = guid;
     function isEmpty(value) {
-        return !sn.isDefined(value) || value === "" || (sn.isObject(value) && Object.keys(value).length === 0);
+        return !sn.isDefined(value) || value === "" || (sn.isArray(value) && value.length < 1) || (sn.isObject(value) && Object.keys(value).length < 1);
     }
     sn.isEmpty = isEmpty;
     function mount(container, componentDefinition, initArguments) {
@@ -575,5 +675,11 @@ var sn;
         }
     }
     sn.mount = mount;
+    function bind(prop, scope) {
+        return function (event) {
+            scope[prop] = event.target.value;
+        };
+    }
+    sn.bind = bind;
 })(sn || (sn = {}));
 //# sourceMappingURL=snapp.js.map

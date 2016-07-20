@@ -48,8 +48,8 @@ namespace sn
                 return node[name];
             } else if (node.getAttribute) {
                 return node.getAttribute(name);
-            } else if (node.attributes && node.attributes[name]) {
-                return node.attributes[name].value;
+            } else if (node.attributes) {
+                return node.attributes[name];
             }
             return null;
         },
@@ -73,7 +73,7 @@ namespace sn
         },
 
         // apply a series of operations
-        patch: function(operations: Array<any>)
+        patch: function(operations: Array<any>, scope?)
         {
             for(let o in operations)
             {
@@ -81,10 +81,10 @@ namespace sn
                 switch(operation.type)
                 {
                     case sn.vdom.operation.APPEND_CHILD:
-                        operation.target.appendChild(this.createRealNode(operation.child));
+                        operation.target.appendChild(this.createRealNode(operation.child, scope));
                         break;
                     case sn.vdom.operation.REPLACE_CHILD:
-                        operation.target.replaceChild(this.createRealNode(operation.child), operation.oldChild);
+                        operation.target.replaceChild(this.createRealNode(operation.child, scope), operation.oldChild);
                         break;
                     case sn.vdom.operation.REMOVE_CHILD:
                         operation.target.removeChild(operation.child);
@@ -109,7 +109,7 @@ namespace sn
 
             // 1. check current attributes
             let currentAttrs = currentNode.attributes || [];
-            let desiredAttrs = desiredNode.attributes|| [];
+            let desiredAttrs = desiredNode.attributes || {};
 
             // 2. check desired attributes
             if(!ignoreAttribute) {
@@ -120,6 +120,7 @@ namespace sn
                     let desiredAttr = desiredAttrs[currentAttr.name];
                     let currentAttrValue = this.getAttribute(currentNode, currentAttr.name);
                     let desiredAttrValue = this.getAttribute(desiredNode, currentAttr.name);
+
                     if (!desiredAttr) {
                         operations.push({
                             type: sn.vdom.operation.REMOVE_ATTRIBUTE,
@@ -137,15 +138,21 @@ namespace sn
                 }
 
                 // check desired attributes
-                for (let a = 0; a < desiredAttrs.length; a++) {
-                    let desiredAttr = desiredAttrs[a];
-                    let currentAttr = currentAttrs[desiredAttr.name];
-                    if (!currentAttr) {
-                        let desiredAttrValue = this.getAttribute(desiredNode, desiredAttr.name);
+                for (let desiredAttr in desiredAttrs) {
+                    let found = false;
+                    for (let a = 0; a < currentAttrs.length; a++) {
+                        if(currentAttrs[a].name === desiredAttr)
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        let desiredAttrValue = this.getAttribute(desiredNode, desiredAttr);
                         operations.push({
                             type: sn.vdom.operation.SET_ATTRIBUTE,
                             target: currentNode,
-                            name: desiredAttr.name,
+                            name: desiredAttr,
                             value: desiredAttrValue
                         });
                     }
@@ -228,7 +235,7 @@ namespace sn
         },
 
         // convert a virtual node to a real one
-        createRealNode: function(node)
+        createRealNode: function(node, scope?)
         {
             let realNode;
             if(node.nodeType === sn.vdom.node.TEXT)
@@ -243,8 +250,8 @@ namespace sn
                 if (node.attributes) {
                     for (let attrName in node.attributes) {
                         let attrValue = node.attributes[attrName];
-                        //if(typeof attrValue === 'function')
-                        //    attrValue = attrValue.bind(scope);
+                        if(typeof attrValue === 'function')
+                            attrValue = attrValue.bind(scope);
                         this.setAttribute(realNode, attrName, attrValue);
                     }
                 }
@@ -255,7 +262,7 @@ namespace sn
                     for (var a = 0; a < node.childNodes.length; a++) {
                         let child = node.childNodes[a];
                         if(child)
-                            virtualContainer.appendChild(this.createRealNode(child, realNode));
+                            virtualContainer.appendChild(this.createRealNode(child, scope));
                     }
                     if (realNode.appendChild) {
                         realNode.appendChild(virtualContainer);

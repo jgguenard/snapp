@@ -31,7 +31,7 @@ namespace sn
         // property change manager
         propertyChanged: function(component, prop)
         {
-            sn.log("Rendering component <" + component.definition.name + "> triggered by <" + component.definition.name + "::" + prop.toString() + ">");
+            sn.log("Rendering component <" + component.definition.name + "> triggered by <" + prop.toString() + ">");
             // request rendering of component
             this.requestComponentRendering(component);
         }
@@ -54,23 +54,42 @@ namespace sn
             this.definition = definition;
             this.observables = [];
             let $component = this;
-            this.scope = new Proxy({}, {
+            this.scope = this.createScope();
+        }
+
+        // create scope
+        createScope(initialData?)
+        {
+            let component = this;
+            let scopeID = sn.guid();
+            return new Proxy(initialData || {}, {
                 // getter
                 get: function (obj, prop) {
-                    if(sn.isDefined(obj[prop]) && !sn.isFunction(obj[prop]) && !sn.inArray($component.observables, prop))
+                    let propID = scopeID + prop.toString();
+                    if(
+                        sn.isDefined(obj[prop]) &&
+                        !sn.isFunction(obj[prop]) &&
+                        prop !== "__proto__" &&
+                        !prop.toString().startsWith("$") &&
+                        !sn.inArray(component.observables, propID))
                     {
-                        sn.log("Observing property <" + $component.definition.name + "." + prop.toString() + ">");
-                        $component.observables.push(prop);
+                        sn.log("Observing property <" + prop.toString() + "> of scope <" + scopeID + ">");
+                        component.observables.push(propID);
                     }
                     return obj[prop];
                 },
 
                 // setter
                 set: function (obj, prop, value): boolean {
+                    let propID = scopeID + prop.toString();
+                    // create scope for inner objects because Proxy is limited to its direct elements
+                    if(typeof value === "object")
+                        value = component.createScope(value);
+                    // save change
                     obj[prop] = value;
                     // notify property change
-                    if(!sn.isFunction(value) && sn.inArray($component.observables, prop))
-                        sn.component.propertyChanged($component, prop);
+                    if(!sn.isFunction(value) && sn.inArray(component.observables, propID))
+                        sn.component.propertyChanged(component, propID);
                     return true;
                 }
             });
@@ -155,7 +174,7 @@ namespace sn
                 let operations = sn.vdom.diff(this.container, desiredView, true);
 
                 // apply operations
-                sn.vdom.patch(operations);
+                sn.vdom.patch(operations, this.scope);
 
                 sn.log("Component <" + this.definition.name + "> rendered");
             }

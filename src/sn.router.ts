@@ -83,7 +83,7 @@ namespace sn
             this.setEnabled(true);
         },
 
-        redirect: function(path, args)
+        route: function(path, args)
         {
             // apply arguments
             if(args)
