@@ -27,7 +27,7 @@ A module to manage application states with URL segments
 
 A module to validate data, mainly used for form fields
 
-#### How to add custom validators
+#### How to add your own validator
 
 
 ```js
