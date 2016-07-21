@@ -92,6 +92,5 @@ namespace sn
             let component = new sn.Component(componentDefinition);
             component.mount(container, initArguments);
         }
-
     }
 }

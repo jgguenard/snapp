@@ -102,6 +102,8 @@ namespace sn
                         this.removeAttribute(operation.target, operation.name);
                         break;
                     case sn.vdom.operation.SET_ATTRIBUTE:
+                        if(typeof operation.value === 'function')
+                            operation.value = operation.value.bind(scope);
                         this.setAttribute(operation.target, operation.name, operation.value);
                         break;
                     case sn.vdom.operation.SET_TEXT_CONTENT:
@@ -286,6 +288,7 @@ namespace sn
                 realNode = document.createElement("DIV");
                 sn.mount(realNode, node.tagName, node.attributes);
             }
+
             return realNode;
         },
 

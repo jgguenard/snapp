@@ -102,8 +102,10 @@ namespace sn
                     let propID = scopeID + prop.toString();
                     let oldValue = obj[prop];
                     // create scope for inner objects because Proxy is limited to its direct elements
-                    if(typeof value === "object")
+                    if(typeof value === "object" && !prop.toString().startsWith("$"))
+                    {
                         value = component.createScope(value);
+                    }
                     // save change
                     obj[prop] = value;
                     // notify property change

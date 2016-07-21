@@ -94,6 +94,8 @@ var sn;
                         this.removeAttribute(operation.target, operation.name);
                         break;
                     case sn.vdom.operation.SET_ATTRIBUTE:
+                        if (typeof operation.value === 'function')
+                            operation.value = operation.value.bind(scope);
                         this.setAttribute(operation.target, operation.name, operation.value);
                         break;
                     case sn.vdom.operation.SET_TEXT_CONTENT:
@@ -406,8 +408,9 @@ var sn;
                 set: function (obj, prop, value) {
                     let propID = scopeID + prop.toString();
                     let oldValue = obj[prop];
-                    if (typeof value === "object")
+                    if (typeof value === "object" && !prop.toString().startsWith("$")) {
                         value = component.createScope(value);
+                    }
                     obj[prop] = value;
                     if ((value !== oldValue) && !sn.isFunction(value) && sn.inArray(component.observables, propID))
                         sn.component.observablePropertyChanged(component, scopeID, obj, prop, value, oldValue);
@@ -566,33 +569,47 @@ var sn;
 })(sn || (sn = {}));
 var sn;
 (function (sn) {
+    function form(fieldsOptions, initialData) {
+        return new sn.FormObject(fieldsOptions, initialData);
+    }
+    sn.form = form;
     sn.FormField = {
         name: "FormField",
         init: function (form, name, attributes, options) {
             this.value = form[name] || "";
             sn.component.observe(name, form, (newValue, oldValue) => {
+                this.$form.validateField(name, newValue);
                 this.value = newValue;
             });
         },
         update: function (form, name, attributes, options) {
-            this.form = form;
-            this.attributes = sn.extend({
+            this.$form = form;
+            this.$options = sn.extend({
+                updateEvent: "onchange",
+                updateDebounce: 0,
+                choices: null,
+                multiline: false
+            }, options || {});
+            this.$attributes = sn.extend({
                 name: name,
-                onchange: (event) => {
-                    let value = event.target.value;
-                    this.form.$errors[name] = this.form.validateField(name, value);
-                    this.value = value;
-                    this.form.setFieldValue(name, value);
-                    this.form.$pristine = false;
-                }
             }, attributes || {});
+            let updateHandler = (event) => {
+                let value = event.target.value;
+                this.$form.setFieldValue(name, value);
+                this.$form.setPristine(false);
+            };
+            let timer;
+            this.$attributes[this.$options.updateEvent] = (this.$options.updateDebounce) ? (event) => {
+                clearTimeout(timer);
+                timer = setTimeout(updateHandler.bind(this, event), this.$options.updateDebounce);
+            } : updateHandler;
         },
         render: function () {
-            var attributes = sn.extend({}, this.attributes);
+            var attributes = sn.extend({}, this.$attributes);
             let css_classes = (!sn.isEmpty(attributes["class"] || "")) ? " " : "";
-            if (!sn.isEmpty(this.form.$errors[attributes.name])) {
+            if (!sn.isEmpty(this.$form.$errors[attributes.name])) {
                 css_classes += "sn-invalid";
-                this.form.$errors[attributes.name].map((item) => {
+                this.$form.$errors[attributes.name].map((item) => {
                     css_classes += " sn-invalid-" + item.replace("_", "-");
                 });
             }
@@ -600,27 +617,61 @@ var sn;
                 css_classes += "sn-valid";
             }
             attributes["class"] = css_classes;
-            let tagName = (this.options) ? "select" : (attributes.multiline === true) ? "textarea" : "input";
-            switch (tagName) {
-                case "select":
-                    break;
-                case "input":
+            let tagName = (this.$options.choices)
+                ? "SELECT" : (this.$options.multiline === true) ? "TEXTAREA" : "INPUT";
+            let children = [];
+            if (tagName === "SELECT") {
+                for (let key in this.$options.choices) {
+                    let selected = (key == this.value);
+                    children.push(el("option", { value: key, selected: selected }, this.$options.choices[key]));
+                }
+            }
+            else {
+                if (tagName === "INPUT") {
                     if (!attributes.type)
                         attributes.type = "text";
-                    break;
-                case "textarea":
-                    delete attributes["multiline"];
-                    break;
+                    if (attributes.type === "checkbox") {
+                        attributes.checked = (this.$options.value == this.value);
+                        attributes.value = this.$options.value;
+                    }
+                    else if (attributes.type === "radio") {
+                        attributes.checked = (attributes.value == this.value);
+                    }
+                    else {
+                        attributes.value = this.value;
+                    }
+                }
+                else {
+                    attributes.value = this.value;
+                }
             }
-            attributes.value = this.value;
-            return el(tagName, attributes);
+            return el(tagName, attributes, children);
         }
     };
-    class Form {
-        constructor(rules) {
-            this.$rules = rules || {};
+    class FormObject {
+        constructor(fieldsOptions, initialData) {
+            this.$fields = fieldsOptions || {};
             this.$errors = {};
             this.$pristine = true;
+            if (sn.isDefined(initialData))
+                this.setFieldsValue(initialData);
+        }
+        serialize() {
+            let data = {};
+            for (let key in this.$fields) {
+                data[key] = this[key];
+            }
+            return data;
+        }
+        setPristine(value) {
+            this.$pristine = (value === true);
+        }
+        setFieldValue(name, value) {
+            this[name] = value;
+        }
+        setFieldsValue(data) {
+            for (let key in data)
+                this.setFieldValue(key, data[key]);
         }
         isValid() {
             for (let e in this.$errors)
@@ -631,29 +682,29 @@ var sn;
         isPristine() {
             return this.$pristine;
         }
-        setFieldValue(name, value) {
-            this[name] = value;
-        }
         validateField(fieldName, fieldValue) {
             let errors = [];
-            let rules = this.$rules[fieldName];
-            if (!sn.isEmpty(rules)) {
-                if (!sn.isArray(rules))
-                    rules = [rules];
-                for (let r in rules) {
-                    let validator = rules[r];
-                    let assertion = sn.validation[validator](fieldValue);
-                    if (assertion !== true)
-                        errors.push(validator);
+            if (this.$fields[fieldName]) {
+                let rules = this.$fields[fieldName].validation;
+                if (!sn.isEmpty(rules)) {
+                    if (!sn.isArray(rules))
+                        rules = [rules];
+                    for (let r in rules) {
+                        let validator = rules[r];
+                        let assertion = sn.validation[validator](fieldValue);
+                        if (assertion !== true)
+                            errors.push(validator);
+                    }
                 }
             }
-            return errors;
+            this.$errors[fieldName] = errors;
+            return (errors.length < 0);
         }
-        field(name, attributes, options) {
-            return el(sn.FormField, { form: this, name: name, attributes: attributes, options: options });
+        field(name, attributes) {
+            return el(sn.FormField, { form: this, name: name, attributes: attributes, options: this.$fields[name] });
         }
     }
-    sn.Form = Form;
+    sn.FormObject = FormObject;
 })(sn || (sn = {}));
 var sn;
 (function (sn) {
