@@ -315,7 +315,7 @@ namespace sn
             let node = null;
 
             // handle case when we receive anything except a set of options as a 2nd argument
-            if(!sn.isDefined(childrenOrValue) && (sn.isArray(attributes) || !sn.isObject(attributes) || attributes.$virtual === true))
+            if(!sn.isDefined(childrenOrValue) && sn.isDefined(attributes) && (sn.isArray(attributes) || !sn.isObject(attributes) || attributes.$virtual === true))
             {
                 childrenOrValue = attributes;
                 attributes = null;

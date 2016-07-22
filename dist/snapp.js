@@ -259,7 +259,7 @@ var sn;
         },
         createVirtualNode: function (tagName, attributes, childrenOrValue) {
             let node = null;
-            if (!sn.isDefined(childrenOrValue) && (sn.isArray(attributes) || !sn.isObject(attributes) || attributes.$virtual === true)) {
+            if (!sn.isDefined(childrenOrValue) && sn.isDefined(attributes) && (sn.isArray(attributes) || !sn.isObject(attributes) || attributes.$virtual === true)) {
                 childrenOrValue = attributes;
                 attributes = null;
             }
