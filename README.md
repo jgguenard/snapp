@@ -11,6 +11,10 @@ A series of helpers
 
 A module to manage components
 
+### event
+
+A module to manage event emitters and observers
+
 ### form
 
 A module to render forms

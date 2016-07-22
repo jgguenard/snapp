@@ -11,6 +11,7 @@
 
   "files": [
     "src/sn.vdom.ts",
+    "src/sn.event.ts",
     "src/sn.router.ts",
     "src/sn.component.ts",
     "src/sn.request.ts",

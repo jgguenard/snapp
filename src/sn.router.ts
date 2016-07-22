@@ -58,6 +58,7 @@ namespace sn
                         // log
                         sn.log("Taking route " + rule);
                         this.routes[rule]();
+                        sn.event.emit("sn.route.update", rule);
                     }, 0);
                     break;
                 }

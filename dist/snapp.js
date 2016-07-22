@@ -304,6 +304,50 @@ var sn;
 var el = sn.vdom.createVirtualNode;
 var sn;
 (function (sn) {
+    sn.event = {
+        observers: {},
+        emit: function (eventName, data) {
+            let eventObservers = this.observers[eventName];
+            if (eventObservers)
+                for (let o in eventObservers)
+                    eventObservers[o].callback(data);
+        },
+        addListener: function (eventName, callback, priority) {
+            if (!this.observers[eventName])
+                this.observers[eventName] = [];
+            let id = sn.guid();
+            this.observers[eventName].push({
+                id: id,
+                priority: priority || 1000,
+                callback: callback
+            });
+            this.observers[eventName].sort(function (a, b) {
+                if (a.priority < b.priority)
+                    return -1;
+                if (a.priority > b.priority)
+                    return 1;
+                return 0;
+            });
+            return id;
+        },
+        removeListeners: function (eventName) {
+            if (this.observers[eventName])
+                this.observers[eventName] = null;
+        },
+        removeListener: function (eventName, listenerID) {
+            if (this.observers[eventName]) {
+                for (let o in this.observers[eventName]) {
+                    if (this.observers[o].id === listenerID) {
+                        delete this.observers[o];
+                        break;
+                    }
+                }
+            }
+        }
+    };
+})(sn || (sn = {}));
+var sn;
+(function (sn) {
     sn.router = {
         routes: {},
         params: [],
@@ -347,6 +391,7 @@ var sn;
                     setTimeout(() => {
                         sn.log("Taking route " + rule);
                         this.routes[rule]();
+                        sn.event.emit("sn.route.update", rule);
                     }, 0);
                     break;
                 }
