@@ -27,6 +27,17 @@ A module to manage application states with URL segments
 
 A module to validate data, mainly used for form fields
 
+#### How to add your own validator
+
+
+```js
+// your function must return a boolean value (true = valid)
+sn.validation.isTom = function(value)
+{
+  return value === "Tom";
+}
+```
+
 ### vdom
 
 The virtual DOM engine (mainly used to diff and patch components)
