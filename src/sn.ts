@@ -3,7 +3,7 @@ namespace sn
     // config
     export var config = {
         logPrefix: "sn: ",
-        debug: true
+        debug: false
     }
 
     // error

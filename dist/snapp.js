@@ -193,12 +193,21 @@ var sn;
                     });
                 }
                 else if (currentChild.nodeType !== desiredChild.nodeType || currentChild["tagName"] !== desiredChild["tagName"]) {
-                    operations.push({
-                        type: sn.vdom.operation.REPLACE_CHILD,
-                        target: currentNode,
-                        child: desiredChild,
-                        oldChild: currentChild
-                    });
+                    let desiredChildIsComponent = desiredChild.nodeType === sn.vdom.node.COMPONENT;
+                    let desiredComponentID = desiredChildIsComponent ? desiredChild.tagName.name : null;
+                    let currentComponent = currentChild.getAttribute("data-sn-component");
+                    let currentComponentID = (currentComponent) ? currentComponent.definition.name : null;
+                    if (!desiredChildIsComponent || (currentComponent && currentComponentID.definition.name !== desiredComponentID)) {
+                        operations.push({
+                            type: sn.vdom.operation.REPLACE_CHILD,
+                            target: currentNode,
+                            child: desiredChild,
+                            oldChild: currentChild
+                        });
+                    }
+                    else {
+                        console.log(desiredChild, currentChild);
+                    }
                 }
                 else {
                     operations = operations.concat(this.diff(currentChild, desiredChild));
@@ -250,7 +259,7 @@ var sn;
         },
         createVirtualNode: function (tagName, attributes, childrenOrValue) {
             let node = null;
-            if (!sn.isDefined(childrenOrValue) && (!sn.isObject(attributes) || attributes.$virtual === true)) {
+            if (!sn.isDefined(childrenOrValue) && (sn.isArray(attributes) || !sn.isObject(attributes) || attributes.$virtual === true)) {
                 childrenOrValue = attributes;
                 attributes = null;
             }
@@ -751,7 +760,7 @@ var sn;
 (function (sn) {
     sn.config = {
         logPrefix: "sn: ",
-        debug: true
+        debug: false
     };
     function error(message) {
         if (sn.config.debug === true)

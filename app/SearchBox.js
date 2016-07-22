@@ -9,10 +9,9 @@ var SearchBox = {
 
     render: function()
     {
-        return [
-            el("div", el("div", "Search with kw :" + this.kw)),
+        return el("div", [
             el("input", { value: this.kw, onchange: (event) => { this.kw = event.target.value }, onkeyup: this.submit })
-        ];
+        ])
     },
 
     submit: function(event)

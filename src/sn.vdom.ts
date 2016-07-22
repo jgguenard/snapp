@@ -212,35 +212,38 @@ namespace sn
                 let desiredChild = desiredNode.childNodes[c];
                 let currentChild = (currentNode.childNodes) ? currentNode.childNodes[c] : null;
 
-                if(!currentChild)
-                {
+                if (!currentChild) {
                     // add child
-                    if(!sn.isEmpty(desiredChild))
-                    {
+                    if (!sn.isEmpty(desiredChild)) {
                         operations.push({
                             type: sn.vdom.operation.APPEND_CHILD,
                             target: currentNode,
                             child: desiredChild
                         });
                     }
-                } else if(sn.isEmpty(desiredChild)) {
+                } else if (sn.isEmpty(desiredChild)) {
                     // remove child
                     operations.push({
                         type: sn.vdom.operation.REMOVE_CHILD,
                         target: currentNode,
                         child: currentNode.childNodes[c],
                     });
-                } else if(currentChild.nodeType !== desiredChild.nodeType || currentChild["tagName"] !== desiredChild["tagName"]) {
-                    //if(desiredChild.nodeType !== sn.vdom.node.COMPONENT)
-                    //{
-                    // replace child
-                    operations.push({
-                        type: sn.vdom.operation.REPLACE_CHILD,
-                        target: currentNode,
-                        child: desiredChild,
-                        oldChild: currentChild
-                    });
-                    //}
+                } else if (currentChild.nodeType !== desiredChild.nodeType || currentChild["tagName"] !== desiredChild["tagName"]) {
+                    let desiredChildIsComponent = desiredChild.nodeType === sn.vdom.node.COMPONENT;
+                    let desiredComponentID = desiredChildIsComponent ? desiredChild.tagName.name : null;
+                    let currentComponent = currentChild.getAttribute("data-sn-component");
+                    let currentComponentID = (currentComponent) ? currentComponent.definition.name : null;
+                    if (!desiredChildIsComponent || (currentComponent && currentComponentID.definition.name !== desiredComponentID)) {
+                        // replace child
+                        operations.push({
+                            type: sn.vdom.operation.REPLACE_CHILD,
+                            target: currentNode,
+                            child: desiredChild,
+                            oldChild: currentChild
+                        });
+                    } else {
+                        console.log(desiredChild, currentChild);
+                    }
                 } else {
                     // compare children
                     operations = operations.concat(this.diff(currentChild, desiredChild));
@@ -312,7 +315,7 @@ namespace sn
             let node = null;
 
             // handle case when we receive anything except a set of options as a 2nd argument
-            if(!sn.isDefined(childrenOrValue) && (!sn.isObject(attributes) || attributes.$virtual === true))
+            if(!sn.isDefined(childrenOrValue) && (sn.isArray(attributes) || !sn.isObject(attributes) || attributes.$virtual === true))
             {
                 childrenOrValue = attributes;
                 attributes = null;
