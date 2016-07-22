@@ -13,6 +13,20 @@ namespace sn
             SET_EVENT: "SET_EVENT"
         },
 
+        allowedTagName: [
+            'A', 'ABBR', 'ADDRESS', 'AREA', 'ARTICLE', 'ASIDE', 'AUDIO', 'B', 'BASE', 'BDI', 'BDO', 'BGSOUND',
+            'BLOCKQUOTE', 'BODY', 'BR', 'BUTTON', 'CANVAS', 'CAPTION', 'CITE', 'CODE', 'COL', 'COLGROUP', 'COMMAND',
+            'CONTENT', 'DATA', 'DATALIST', 'DD', 'DEL', 'DETAILS', 'DFN', 'DIALOG', 'DIV', 'DL', 'DT', 'ELEMENT', 'EM',
+            'EMBED', 'FIELDSET', 'FIGCAPTION', 'FIGURE', 'FONT', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+            'HEAD', 'HEADER', 'HGROUP', 'HR', 'HTML', 'I', 'IFRAME', 'IMAGE', 'IMG', 'INPUT', 'INS', 'KBD', 'KEYGEN',
+            'LABEL', 'LEGEND', 'LI', 'LINK', 'MAIN', 'MAP', 'MARK', 'MARQUEE', 'MENU', 'MENUITEM', 'META', 'METER',
+            'MULTICOL', 'NAV', 'NOBR', 'NOEMBED', 'NOFRAMES', 'NOSCRIPT', 'OBJECT', 'OL', 'OPTGROUP', 'OPTION',
+            'OUTPUT', 'P', 'PARAM', 'PICTURE', 'PRE', 'PROGRESS', 'Q', 'RP', 'RT', 'RTC', 'RUBY', 'S', 'SAMP', 'SCRIPT',
+            'SECTION', 'SELECT', 'SHADOW', 'SMALL', 'SOURCE', 'SPAN', 'STRONG', 'STYLE', 'SUB', 'SUMMARY', 'SUP', 'TABLE',
+            'TBODY', 'TD', 'TEMPLATE', 'TEXTAREA', 'TFOOT', 'TH', 'THEAD', 'TIME', 'TITLE', 'TR', 'TRACK', 'U', 'UL',
+            'VAR', 'VIDEO', 'WBR'
+        ],
+
         // dom node types
         node: {
             COMMENT: 8,
@@ -217,16 +231,16 @@ namespace sn
                         child: currentNode.childNodes[c],
                     });
                 } else if(currentChild.nodeType !== desiredChild.nodeType || currentChild["tagName"] !== desiredChild["tagName"]) {
-                    if(desiredChild.nodeType !== sn.vdom.node.COMPONENT) // ignore nested components
-                    {
-                        // replace child
-                        operations.push({
-                            type: sn.vdom.operation.REPLACE_CHILD,
-                            target: currentNode,
-                            child: desiredChild,
-                            oldChild: currentChild
-                        });
-                    }
+                    //if(desiredChild.nodeType !== sn.vdom.node.COMPONENT)
+                    //{
+                    // replace child
+                    operations.push({
+                        type: sn.vdom.operation.REPLACE_CHILD,
+                        target: currentNode,
+                        child: desiredChild,
+                        oldChild: currentChild
+                    });
+                    //}
                 } else {
                     // compare children
                     operations = operations.concat(this.diff(currentChild, desiredChild));
@@ -297,8 +311,8 @@ namespace sn
         {
             let node = null;
 
-            // handle case when we receive a string value as a 2nd argument
-            if(!sn.isDefined(childrenOrValue) && !sn.isObject(attributes))
+            // handle case when we receive anything except a set of options as a 2nd argument
+            if(!sn.isDefined(childrenOrValue) && (!sn.isObject(attributes) || attributes.$virtual === true))
             {
                 childrenOrValue = attributes;
                 attributes = null;
@@ -314,24 +328,34 @@ namespace sn
                 };
             } else {
 
-                // dom element
-                node = {
-                    tagName: tagName.toString().toUpperCase(),
-                    nodeType: sn.vdom.node.ELEMENT,
-                    attributes:  attributes
-                };
-
-                // handle child nodes
-                if(sn.isArray(childrenOrValue))
+                let tagNameUC = tagName.toString().toUpperCase();
+                if(!sn.inArray(sn.vdom.allowedTagName, tagNameUC))
                 {
-                    node.childNodes = childrenOrValue;
-                } else if(sn.isObject(childrenOrValue)) {
-                    node.childNodes = [childrenOrValue];
-                } else if(!sn.isEmpty(childrenOrValue)) {
-                    node.childNodes = [{
+                    // dom element
+                    node = {
                         nodeType: sn.vdom.node.TEXT,
-                        textContent: childrenOrValue
-                    }];
+                        textContent: tagName
+                    };
+                } else {
+                    // dom element
+                    node = {
+                        tagName: tagNameUC,
+                        nodeType: sn.vdom.node.ELEMENT,
+                        attributes:  attributes
+                    };
+
+                    // handle child nodes
+                    if(sn.isArray(childrenOrValue))
+                    {
+                        node.childNodes = childrenOrValue;
+                    } else if(sn.isObject(childrenOrValue)) {
+                        node.childNodes = [childrenOrValue];
+                    } else if(!sn.isEmpty(childrenOrValue)) {
+                        node.childNodes = [{
+                            nodeType: sn.vdom.node.TEXT,
+                            textContent: childrenOrValue
+                        }];
+                    }
                 }
             }
 

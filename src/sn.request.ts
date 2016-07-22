@@ -20,11 +20,31 @@ namespace sn
             this.options = sn.extend({
                 timeout: 5000,
                 async: true,
+                dataType: "JSON",
                 withCredentials: false,
                 ct: 'application/x-www-form-urlencoded'
             }, options || {});
 
             this.init();
+        }
+
+        prepareParams(obj, prefix?)
+        {
+            var str = [];
+            for(var p in obj) {
+                if (obj.hasOwnProperty(p)) {
+                    var k = prefix ? prefix + "[" + p + "]" : p, v = obj[p];
+                    str.push(typeof v == "object"
+                        ? this.prepareParams(v, k)
+                        : encodeURIComponent(k) + "=" + encodeURIComponent(v));
+                }
+            }
+            return str.join("&");
+        }
+
+        stringToJSON(data)
+        {
+            return JSON.parse(data);
         }
 
         // abort request
@@ -68,8 +88,12 @@ namespace sn
                     // execute fail callback
                     if(this.failCallback) this.failCallback(this.xhr.responseText, this.xhr);
                 } else {
+                    // parse response
+                    let response = this.xhr.responseText;
+                    if(this.options.dataType === "JSON")
+                        response = this.stringToJSON(response);
                     // execute success callback
-                    if(this.successCallback) this.successCallback(this.xhr.responseText, this.xhr);
+                    if(this.successCallback) this.successCallback(response, this.xhr);
                 }
 
                 // execute always callback
@@ -83,13 +107,13 @@ namespace sn
             }, this.options.timeout);
 
             // connect
-            this.xhr.open(this.method.toUpperCase(), this.url, this.options.async);
-
-            // send the request
-            if(this.data)
+            let method = this.method.toUpperCase()
+            let url = this.url + ((this.data && method === "GET") ? "?" + this.prepareParams(this.data) : "");
+            this.xhr.open(method, url, this.options.async);
+            if(method === "POST" && this.data)
             {
                 this.xhr.setRequestHeader('Content-type', this.options.ct);
-                this.xhr.send(this.data);
+                this.xhr.send(this.prepareParams(this.data));
             } else {
                 this.xhr.send(null);
             }

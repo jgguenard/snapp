@@ -10,6 +10,19 @@ var sn;
             SET_TEXT_CONTENT: "SET_TEXT_CONTENT",
             SET_EVENT: "SET_EVENT"
         },
+        allowedTagName: [
+            'A', 'ABBR', 'ADDRESS', 'AREA', 'ARTICLE', 'ASIDE', 'AUDIO', 'B', 'BASE', 'BDI', 'BDO', 'BGSOUND',
+            'BLOCKQUOTE', 'BODY', 'BR', 'BUTTON', 'CANVAS', 'CAPTION', 'CITE', 'CODE', 'COL', 'COLGROUP', 'COMMAND',
+            'CONTENT', 'DATA', 'DATALIST', 'DD', 'DEL', 'DETAILS', 'DFN', 'DIALOG', 'DIV', 'DL', 'DT', 'ELEMENT', 'EM',
+            'EMBED', 'FIELDSET', 'FIGCAPTION', 'FIGURE', 'FONT', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+            'HEAD', 'HEADER', 'HGROUP', 'HR', 'HTML', 'I', 'IFRAME', 'IMAGE', 'IMG', 'INPUT', 'INS', 'KBD', 'KEYGEN',
+            'LABEL', 'LEGEND', 'LI', 'LINK', 'MAIN', 'MAP', 'MARK', 'MARQUEE', 'MENU', 'MENUITEM', 'META', 'METER',
+            'MULTICOL', 'NAV', 'NOBR', 'NOEMBED', 'NOFRAMES', 'NOSCRIPT', 'OBJECT', 'OL', 'OPTGROUP', 'OPTION',
+            'OUTPUT', 'P', 'PARAM', 'PICTURE', 'PRE', 'PROGRESS', 'Q', 'RP', 'RT', 'RTC', 'RUBY', 'S', 'SAMP', 'SCRIPT',
+            'SECTION', 'SELECT', 'SHADOW', 'SMALL', 'SOURCE', 'SPAN', 'STRONG', 'STYLE', 'SUB', 'SUMMARY', 'SUP', 'TABLE',
+            'TBODY', 'TD', 'TEMPLATE', 'TEXTAREA', 'TFOOT', 'TH', 'THEAD', 'TIME', 'TITLE', 'TR', 'TRACK', 'U', 'UL',
+            'VAR', 'VIDEO', 'WBR'
+        ],
         node: {
             COMMENT: 8,
             ELEMENT: 1,
@@ -180,14 +193,12 @@ var sn;
                     });
                 }
                 else if (currentChild.nodeType !== desiredChild.nodeType || currentChild["tagName"] !== desiredChild["tagName"]) {
-                    if (desiredChild.nodeType !== sn.vdom.node.COMPONENT) {
-                        operations.push({
-                            type: sn.vdom.operation.REPLACE_CHILD,
-                            target: currentNode,
-                            child: desiredChild,
-                            oldChild: currentChild
-                        });
-                    }
+                    operations.push({
+                        type: sn.vdom.operation.REPLACE_CHILD,
+                        target: currentNode,
+                        child: desiredChild,
+                        oldChild: currentChild
+                    });
                 }
                 else {
                     operations = operations.concat(this.diff(currentChild, desiredChild));
@@ -239,7 +250,7 @@ var sn;
         },
         createVirtualNode: function (tagName, attributes, childrenOrValue) {
             let node = null;
-            if (!sn.isDefined(childrenOrValue) && !sn.isObject(attributes)) {
+            if (!sn.isDefined(childrenOrValue) && (!sn.isObject(attributes) || attributes.$virtual === true)) {
                 childrenOrValue = attributes;
                 attributes = null;
             }
@@ -251,22 +262,31 @@ var sn;
                 };
             }
             else {
-                node = {
-                    tagName: tagName.toString().toUpperCase(),
-                    nodeType: sn.vdom.node.ELEMENT,
-                    attributes: attributes
-                };
-                if (sn.isArray(childrenOrValue)) {
-                    node.childNodes = childrenOrValue;
+                let tagNameUC = tagName.toString().toUpperCase();
+                if (!sn.inArray(sn.vdom.allowedTagName, tagNameUC)) {
+                    node = {
+                        nodeType: sn.vdom.node.TEXT,
+                        textContent: tagName
+                    };
                 }
-                else if (sn.isObject(childrenOrValue)) {
-                    node.childNodes = [childrenOrValue];
-                }
-                else if (!sn.isEmpty(childrenOrValue)) {
-                    node.childNodes = [{
-                            nodeType: sn.vdom.node.TEXT,
-                            textContent: childrenOrValue
-                        }];
+                else {
+                    node = {
+                        tagName: tagNameUC,
+                        nodeType: sn.vdom.node.ELEMENT,
+                        attributes: attributes
+                    };
+                    if (sn.isArray(childrenOrValue)) {
+                        node.childNodes = childrenOrValue;
+                    }
+                    else if (sn.isObject(childrenOrValue)) {
+                        node.childNodes = [childrenOrValue];
+                    }
+                    else if (!sn.isEmpty(childrenOrValue)) {
+                        node.childNodes = [{
+                                nodeType: sn.vdom.node.TEXT,
+                                textContent: childrenOrValue
+                            }];
+                    }
                 }
             }
             node.$virtual = true;
@@ -482,10 +502,26 @@ var sn;
             this.options = sn.extend({
                 timeout: 5000,
                 async: true,
+                dataType: "JSON",
                 withCredentials: false,
                 ct: 'application/x-www-form-urlencoded'
             }, options || {});
             this.init();
+        }
+        prepareParams(obj, prefix) {
+            var str = [];
+            for (var p in obj) {
+                if (obj.hasOwnProperty(p)) {
+                    var k = prefix ? prefix + "[" + p + "]" : p, v = obj[p];
+                    str.push(typeof v == "object"
+                        ? this.prepareParams(v, k)
+                        : encodeURIComponent(k) + "=" + encodeURIComponent(v));
+                }
+            }
+            return str.join("&");
+        }
+        stringToJSON(data) {
+            return JSON.parse(data);
         }
         abort() {
             this.xhr.abort();
@@ -518,8 +554,11 @@ var sn;
                         this.failCallback(this.xhr.responseText, this.xhr);
                 }
                 else {
+                    let response = this.xhr.responseText;
+                    if (this.options.dataType === "JSON")
+                        response = this.stringToJSON(response);
                     if (this.successCallback)
-                        this.successCallback(this.xhr.responseText, this.xhr);
+                        this.successCallback(response, this.xhr);
                 }
                 if (this.alwaysCallback)
                     this.alwaysCallback(this.xhr.responseText, this.xhr);
@@ -527,10 +566,12 @@ var sn;
             this.requestTimeout = setTimeout(() => {
                 this.abort();
             }, this.options.timeout);
-            this.xhr.open(this.method.toUpperCase(), this.url, this.options.async);
-            if (this.data) {
+            let method = this.method.toUpperCase();
+            let url = this.url + ((this.data && method === "GET") ? "?" + this.prepareParams(this.data) : "");
+            this.xhr.open(method, url, this.options.async);
+            if (method === "POST" && this.data) {
                 this.xhr.setRequestHeader('Content-type', this.options.ct);
-                this.xhr.send(this.data);
+                this.xhr.send(this.prepareParams(this.data));
             }
             else {
                 this.xhr.send(null);
