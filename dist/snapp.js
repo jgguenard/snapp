@@ -195,18 +195,15 @@ var sn;
                 else if (currentChild.nodeType !== desiredChild.nodeType || currentChild["tagName"] !== desiredChild["tagName"]) {
                     let desiredChildIsComponent = desiredChild.nodeType === sn.vdom.node.COMPONENT;
                     let desiredComponentID = desiredChildIsComponent ? desiredChild.tagName.name : null;
-                    let currentComponent = currentChild.getAttribute("data-sn-component");
+                    let currentComponent = this.getAttribute(currentChild, "data-sn-component");
                     let currentComponentID = (currentComponent) ? currentComponent.definition.name : null;
-                    if (!desiredChildIsComponent || (currentComponent && currentComponentID.definition.name !== desiredComponentID)) {
+                    if (!desiredChildIsComponent || (currentComponent && currentComponentID !== desiredComponentID)) {
                         operations.push({
                             type: sn.vdom.operation.REPLACE_CHILD,
                             target: currentNode,
                             child: desiredChild,
                             oldChild: currentChild
                         });
-                    }
-                    else {
-                        console.log(desiredChild, currentChild);
                     }
                 }
                 else {
@@ -259,7 +256,8 @@ var sn;
         },
         createVirtualNode: function (tagName, attributes, childrenOrValue) {
             let node = null;
-            if (!sn.isDefined(childrenOrValue) && sn.isDefined(attributes) && (sn.isArray(attributes) || !sn.isObject(attributes) || attributes.$virtual === true)) {
+            if (!sn.isDefined(childrenOrValue) && sn.isDefined(attributes) &&
+                (sn.isArray(attributes) || !sn.isObject(attributes) || attributes.$virtual === true)) {
                 childrenOrValue = attributes;
                 attributes = null;
             }
