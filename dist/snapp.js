@@ -756,6 +756,7 @@ var sn;
 })(sn || (sn = {}));
 var sn;
 (function (sn) {
+    sn.version = "0.1";
     sn.config = {
         logPrefix: "sn: ",
         debug: false
@@ -809,7 +810,8 @@ var sn;
     }
     sn.guid = guid;
     function isEmpty(value) {
-        return !sn.isDefined(value) || value === "" || (sn.isArray(value) && value.length < 1) || (sn.isObject(value) && Object.keys(value).length < 1);
+        return !sn.isDefined(value) || value === "" || (sn.isArray(value) && value.length < 1) ||
+            (sn.isObject(value) && Object.keys(value).length < 1);
     }
     sn.isEmpty = isEmpty;
     function mount(container, componentDefinition, initArguments) {

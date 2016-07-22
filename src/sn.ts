@@ -1,5 +1,8 @@
 namespace sn
 {
+    // version
+    export var version = "0.1"
+
     // config
     export var config = {
         logPrefix: "sn: ",
@@ -76,7 +79,8 @@ namespace sn
     // is empty
     export function isEmpty(value: any)
     {
-        return !sn.isDefined(value) || value === "" || (sn.isArray(value) && value.length < 1) || (sn.isObject(value) && Object.keys(value).length < 1);
+        return !sn.isDefined(value) || value === "" || (sn.isArray(value) && value.length < 1) ||
+            (sn.isObject(value) && Object.keys(value).length < 1);
     }
 
     // mount component on top of a dom element
