@@ -36,7 +36,7 @@ A module to validate data, mainly used for form fields
 
 ```js
 // your function must return a boolean value (true = valid)
-sn.validation.isTom = function(value, fieldName, form)
+sn.validation.isTom = function(value, args, fieldName, form)
 {
   return value === "Tom";
 }
