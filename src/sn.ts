@@ -167,18 +167,18 @@ namespace sn
     }
 
     // guid
-    export function guid() {
+    export function guid(prefix?: string) {
         function s4() {
             return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
         }
-        return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
+        return (prefix || "") + s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
     }
 
     // mount component on top of a dom element
-    export function mount(container: Element, componentDefinition: Object, initArguments?: any)
+    export function mount(container: Element, componentDefinition: any, initArguments?: any)
     {
         let mountedComponent = sn.vdom.getAttribute(container, "data-sn-component");
-        if(mountedComponent && mountedComponent.definition === componentDefinition)
+        if(mountedComponent && sn.component.hasDefinition(mountedComponent, componentDefinition))
         {
             // update existing component
             mountedComponent.update(initArguments);

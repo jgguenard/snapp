@@ -1,4 +1,5 @@
-# snapp
+# sn.app
+
 A simple framework to build single-page applications for modern browsers
 
 ## modules
@@ -45,3 +46,10 @@ sn.validation.isTom = function(value, fieldName, form)
 ### vdom
 
 The virtual DOM engine (mainly used to diff and patch components)
+
+## todo
+
+* [component] Fix embedded form/scope not triggering parent scope rendering
+* [request] File upload
+* [form] Input masks
+* [core] Support for Firefox

@@ -5,12 +5,24 @@ namespace sn
 
         lifeCycle: ["init", "update", "render", "dispose"],
 
+        // check if a component has a specific definition
+        hasDefinition: function(component, definition)
+        {
+            return (component.definition.$cdid === definition.$cdid);
+        },
+
+        // get component identifier
+        getIdentifier(component)
+        {
+            return component.definition.name ? component.definition.name : component.definition.$cdid;
+        },
+
         // abort pending rendering request for a component
         abortComponentRendering: function(component)
         {
             if(component.$pendingRendering)
             {
-                sn.log("Ignoring rendering request of component <" + component.definition.name + ">");
+                sn.log("Ignoring rendering request of component <" + sn.component.getIdentifier(component) + ">");
                 clearTimeout(component.$pendingRendering);
             }
         },
@@ -31,7 +43,7 @@ namespace sn
         // property change manager
         observablePropertyChanged: function(component, scopeID, scope, prop, newValue, oldValue)
         {
-            sn.log("Rendering component <" + component.definition.name +
+            sn.log("Rendering component <" + sn.component.getIdentifier(component) +
                 "> triggered by <" + prop.toString() + "> of scope <!" + scopeID + ">");
 
             // request rendering of component
@@ -119,7 +131,7 @@ namespace sn
         // mount a component on a container
         mount(container, ctrlArguments?)
         {
-            sn.log("Mounting component <" + this.definition.name + ">");
+            sn.log("Mounting component <" + sn.component.getIdentifier(this) + ">");
 
             // handle current component
             let mountedComponent = sn.vdom.getAttribute(container, "data-sn-component");
@@ -143,7 +155,7 @@ namespace sn
             // update component
             this.update(ctrlArguments);
 
-            sn.log("Component <" + this.definition.name + "> mounted");
+            sn.log("Component <" + sn.component.getIdentifier(this) + "> mounted");
         }
 
         // call a method with named arguments
@@ -170,7 +182,7 @@ namespace sn
         init(ctrlArguments?)
         {
             this.controller("init", ctrlArguments);
-            sn.log("Component <" + this.definition.name + "> initialized");
+            sn.log("Component <" + sn.component.getIdentifier(this) + "> initialized");
         }
 
         // life cycle: update
@@ -179,7 +191,7 @@ namespace sn
             this.controller("update", ctrlArguments);
             // ask manager to render itself
             sn.component.requestComponentRendering(this);
-            sn.log("Component <" + this.definition.name + "> updated");
+            sn.log("Component <" + sn.component.getIdentifier(this) + "> updated");
         }
 
         // life cycle: render
@@ -197,7 +209,7 @@ namespace sn
                 // apply operations
                 sn.vdom.patch(operations, this.scope);
 
-                sn.log("Component <" + this.definition.name + "> rendered");
+                sn.log("Component <" + sn.component.getIdentifier(this) + "> rendered");
             }
         }
 
@@ -210,7 +222,7 @@ namespace sn
             // life cycle: dispose
             if(this.definition.dispose)
                 this.definition.dispose.call(this.scope);
-            sn.log("Component <" + this.definition.name + "> unmounted");
+            sn.log("Component <" + sn.component.getIdentifier(this) + "> unmounted");
         }
     }
 }

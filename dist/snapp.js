@@ -201,10 +201,9 @@ var sn;
                 }
                 else if (currentChild.nodeType !== desiredChild.nodeType || currentChild["tagName"] !== desiredChild["tagName"]) {
                     let desiredChildIsComponent = desiredChild.nodeType === sn.vdom.node.COMPONENT;
-                    let desiredComponentID = desiredChildIsComponent ? desiredChild.tagName.name : null;
                     let currentComponent = this.getAttribute(currentChild, "data-sn-component");
-                    let currentComponentID = (currentComponent) ? currentComponent.definition.name : null;
-                    if (!desiredChildIsComponent || (currentComponent && currentComponentID !== desiredComponentID)) {
+                    if (!desiredChildIsComponent ||
+                        (currentComponent && !sn.component.hasDefinition(currentComponent, desiredChild.definition))) {
                         if (desiredChild.nodeType !== sn.vdom.node.HTML) {
                             operations.push({
                                 type: sn.vdom.operation.REPLACE_CHILD,
@@ -317,7 +316,7 @@ var sn;
             }
             else if (node.nodeType === sn.vdom.node.COMPONENT) {
                 realNode = document.createElement("DIV");
-                sn.mount(realNode, node.tagName, node.attributes);
+                sn.mount(realNode, node.definition, node.attributes);
             }
             return realNode;
         },
@@ -334,9 +333,11 @@ var sn;
                 attributes = attributes || {};
             }
             if (sn.isObject(tagNameOrContent)) {
+                if (!tagNameOrContent.$cdid)
+                    tagNameOrContent.$cdid = sn.guid("snc");
                 node = {
                     nodeType: sn.vdom.node.COMPONENT,
-                    tagName: tagNameOrContent
+                    definition: tagNameOrContent
                 };
             }
             else {
@@ -501,9 +502,15 @@ var sn;
 (function (sn) {
     sn.component = {
         lifeCycle: ["init", "update", "render", "dispose"],
+        hasDefinition: function (component, definition) {
+            return (component.definition.$cdid === definition.$cdid);
+        },
+        getIdentifier(component) {
+            return component.definition.name ? component.definition.name : component.definition.$cdid;
+        },
         abortComponentRendering: function (component) {
             if (component.$pendingRendering) {
-                sn.log("Ignoring rendering request of component <" + component.definition.name + ">");
+                sn.log("Ignoring rendering request of component <" + sn.component.getIdentifier(component) + ">");
                 clearTimeout(component.$pendingRendering);
             }
         },
@@ -515,7 +522,7 @@ var sn;
             }, 0);
         },
         observablePropertyChanged: function (component, scopeID, scope, prop, newValue, oldValue) {
-            sn.log("Rendering component <" + component.definition.name +
+            sn.log("Rendering component <" + sn.component.getIdentifier(component) +
                 "> triggered by <" + prop.toString() + "> of scope <!" + scopeID + ">");
             this.requestComponentRendering(component);
             let observers = (scope.$observers) ? scope.$observers[prop] : null;
@@ -568,7 +575,7 @@ var sn;
             });
         }
         mount(container, ctrlArguments) {
-            sn.log("Mounting component <" + this.definition.name + ">");
+            sn.log("Mounting component <" + sn.component.getIdentifier(this) + ">");
             let mountedComponent = sn.vdom.getAttribute(container, "data-sn-component");
             if (sn.isDefined(mountedComponent))
                 mountedComponent.dispose();
@@ -579,7 +586,7 @@ var sn;
                     this.scope[p] = this.definition[p];
             this.init(ctrlArguments);
             this.update(ctrlArguments);
-            sn.log("Component <" + this.definition.name + "> mounted");
+            sn.log("Component <" + sn.component.getIdentifier(this) + "> mounted");
         }
         controller(ctrl, ctrlArgs) {
             if (this.definition[ctrl]) {
@@ -596,12 +603,12 @@ var sn;
         }
         init(ctrlArguments) {
             this.controller("init", ctrlArguments);
-            sn.log("Component <" + this.definition.name + "> initialized");
+            sn.log("Component <" + sn.component.getIdentifier(this) + "> initialized");
         }
         update(ctrlArguments) {
             this.controller("update", ctrlArguments);
             sn.component.requestComponentRendering(this);
-            sn.log("Component <" + this.definition.name + "> updated");
+            sn.log("Component <" + sn.component.getIdentifier(this) + "> updated");
         }
         render() {
             if (this.definition.render) {
@@ -609,14 +616,14 @@ var sn;
                 let desiredView = sn.vdom.createVirtualNode(this.container.tagName, null, desiredContent);
                 let operations = sn.vdom.diff(this.container, desiredView, true);
                 sn.vdom.patch(operations, this.scope);
-                sn.log("Component <" + this.definition.name + "> rendered");
+                sn.log("Component <" + sn.component.getIdentifier(this) + "> rendered");
             }
         }
         dispose() {
             sn.component.abortComponentRendering(this);
             if (this.definition.dispose)
                 this.definition.dispose.call(this.scope);
-            sn.log("Component <" + this.definition.name + "> unmounted");
+            sn.log("Component <" + sn.component.getIdentifier(this) + "> unmounted");
         }
     }
     sn.Component = Component;
@@ -789,6 +796,11 @@ var sn;
             return regex.test(value);
         }
     };
+})(sn || (sn = {}));
+var sn;
+(function (sn) {
+    {
+    }
 })(sn || (sn = {}));
 var sn;
 (function (sn) {
@@ -1056,16 +1068,16 @@ var sn;
             (sn.isObject(value) && Object.keys(value).length < 1);
     }
     sn.isEmpty = isEmpty;
-    function guid() {
+    function guid(prefix) {
         function s4() {
             return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
         }
-        return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
+        return (prefix || "") + s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
     }
     sn.guid = guid;
     function mount(container, componentDefinition, initArguments) {
         let mountedComponent = sn.vdom.getAttribute(container, "data-sn-component");
-        if (mountedComponent && mountedComponent.definition === componentDefinition) {
+        if (mountedComponent && sn.component.hasDefinition(mountedComponent, componentDefinition)) {
             mountedComponent.update(initArguments);
         }
         else {

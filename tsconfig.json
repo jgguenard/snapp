@@ -16,6 +16,7 @@
     "src/sn.component.ts",
     "src/sn.request.ts",
     "src/sn.validation.ts",
+    "src/sn.mask.ts",
     "src/sn.form.ts",
     "src/sn.ts"
   ]

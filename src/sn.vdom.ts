@@ -237,11 +237,12 @@ namespace sn
 
                     // detect mounted component to avoid diffing a nested component
                     let desiredChildIsComponent = desiredChild.nodeType === sn.vdom.node.COMPONENT;
-                    let desiredComponentID = desiredChildIsComponent ? desiredChild.tagName.name : null;
                     let currentComponent = this.getAttribute(currentChild, "data-sn-component");
-                    let currentComponentID = (currentComponent) ? currentComponent.definition.name : null;
 
-                    if (!desiredChildIsComponent || (currentComponent && currentComponentID !== desiredComponentID)) {
+                    if (
+                        !desiredChildIsComponent ||
+                        (currentComponent && !sn.component.hasDefinition(currentComponent, desiredChild.definition))
+                    ) {
                         if(desiredChild.nodeType !== sn.vdom.node.HTML)
                         {
                             // replace child
@@ -391,14 +392,14 @@ namespace sn
             } else if(node.nodeType === sn.vdom.node.COMPONENT) {
                 // COMPONENT
                 realNode = document.createElement("DIV");
-                sn.mount(realNode, node.tagName, node.attributes);
+                sn.mount(realNode, node.definition, node.attributes);
             }
 
             return realNode;
         },
 
         // create a virtual node from parameters
-        createVirtualNode: function(tagNameOrContent: string | Object, attributes?, childrenOrValue?)
+        createVirtualNode: function(tagNameOrContent, attributes?, childrenOrValue?)
         {
             let node = null;
 
@@ -420,9 +421,13 @@ namespace sn
             // if 1st argument is an object, process it as a component
             if(sn.isObject(tagNameOrContent))
             {
+                // make sure component has a unique id
+                if(!tagNameOrContent.$cdid)
+                    tagNameOrContent.$cdid = sn.guid("snc");
+                // create node
                 node = {
                     nodeType: sn.vdom.node.COMPONENT,
-                    tagName: tagNameOrContent
+                    definition: tagNameOrContent
                 };
             } else {
 
