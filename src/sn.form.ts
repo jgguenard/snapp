@@ -17,9 +17,6 @@ namespace sn
             // observe form data changes
             sn.component.observe(name, form, (newValue, oldValue) => {
 
-                // trigger validation
-                this.$form.validateField(name, newValue);
-
                 // set field value
                 this.value = newValue;
 
@@ -68,18 +65,18 @@ namespace sn
         render: function() {
 
             // make a copy of the base attributes
-            var attributes = sn.extend({}, this.$attributes);
+            var attributes = sn.copy(this.$attributes);
 
             // set css class attribute
-            let css_classes = (!sn.isEmpty(attributes["class"] || "")) ? " " : "";
+            let css_classes = (!sn.isEmpty(attributes["class"] || "")) ? attributes["class"] + " " : "";
             if(!sn.isEmpty(this.$form.$errors[attributes.name]))
             {
-                css_classes += "sn-invalid";
+                css_classes += sn.config.form.invalidPrefix;
                 this.$form.$errors[attributes.name].map((item) => {
-                    css_classes += " sn-invalid-" + item.replace("_", "-");
+                    css_classes += " " + sn.config.form.invalidPrefix + "-" + item.replace("_", "-");
                 });
             } else {
-                css_classes += "sn-valid";
+                css_classes += sn.config.form.validPrefix;
             }
             attributes["class"] = css_classes;
 
@@ -161,6 +158,8 @@ namespace sn
         {
             // save value
             this[name] = value;
+            // validate it
+            this.validateField(name, value);
         }
 
         setFieldsValue(data)

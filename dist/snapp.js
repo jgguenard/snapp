@@ -7,7 +7,6 @@ var sn;
             REMOVE_CHILD: "REMOVE_CHILD",
             REMOVE_ATTRIBUTE: "REMOVE_ATTRIBUTE",
             SET_ATTRIBUTE: "SET_ATTRIBUTE",
-            SET_TEXT_CONTENT: "SET_TEXT_CONTENT",
             SET_EVENT: "SET_EVENT"
         },
         allowedTagName: [
@@ -27,6 +26,7 @@ var sn;
             COMMENT: 8,
             ELEMENT: 1,
             TEXT: 3,
+            HTML: 98,
             COMPONENT: 99
         },
         setAttribute: function (node, name, value) {
@@ -111,71 +111,78 @@ var sn;
                             operation.value = operation.value.bind(scope);
                         this.setAttribute(operation.target, operation.name, operation.value);
                         break;
-                    case sn.vdom.operation.SET_TEXT_CONTENT:
-                        operation.target.textContent = operation.value;
-                        break;
                 }
             }
         },
-        diff: function (currentNode, desiredNode, ignoreAttribute) {
+        diffAttributes: function (currentNode, desiredNode) {
             let operations = [];
             let currentAttrs = currentNode.attributes || [];
             let desiredAttrs = desiredNode.attributes || {};
-            if (!ignoreAttribute) {
-                for (let a = 0; a < currentAttrs.length; a++) {
-                    let currentAttr = currentAttrs[a];
-                    let desiredAttr = desiredAttrs[currentAttr.name];
-                    let currentAttrValue = this.getAttribute(currentNode, currentAttr.name);
-                    let desiredAttrValue = this.getAttribute(desiredNode, currentAttr.name);
-                    if (!desiredAttr) {
-                        operations.push({
-                            type: sn.vdom.operation.REMOVE_ATTRIBUTE,
-                            target: currentNode,
-                            name: currentAttr.name
-                        });
-                    }
-                    else if (currentAttrValue !== desiredAttrValue) {
-                        operations.push({
-                            type: sn.vdom.operation.SET_ATTRIBUTE,
-                            target: currentNode,
-                            name: currentAttr.name,
-                            value: desiredAttrValue
-                        });
-                    }
-                }
-                for (let desiredAttr in desiredAttrs) {
-                    let found = false;
-                    for (let a = 0; a < currentAttrs.length; a++) {
-                        if (currentAttrs[a].name === desiredAttr) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        let desiredAttrValue = this.getAttribute(desiredNode, desiredAttr);
-                        operations.push({
-                            type: sn.vdom.operation.SET_ATTRIBUTE,
-                            target: currentNode,
-                            name: desiredAttr,
-                            value: desiredAttrValue
-                        });
-                    }
-                }
-            }
-            if (desiredNode.nodeType === sn.vdom.node.TEXT) {
-                if (desiredNode.textContent != currentNode.textContent) {
+            for (let a = 0; a < currentAttrs.length; a++) {
+                let currentAttr = currentAttrs[a];
+                let desiredAttr = desiredAttrs[currentAttr.name];
+                let currentAttrValue = this.getAttribute(currentNode, currentAttr.name);
+                let desiredAttrValue = this.getAttribute(desiredNode, currentAttr.name);
+                if (!desiredAttr) {
                     operations.push({
-                        type: sn.vdom.operation.SET_TEXT_CONTENT,
+                        type: sn.vdom.operation.REMOVE_ATTRIBUTE,
                         target: currentNode,
-                        value: desiredNode.textContent
+                        name: currentAttr.name
+                    });
+                }
+                else if (currentAttrValue !== desiredAttrValue) {
+                    operations.push({
+                        type: sn.vdom.operation.SET_ATTRIBUTE,
+                        target: currentNode,
+                        name: currentAttr.name,
+                        value: desiredAttrValue
                     });
                 }
             }
-            let desiredChildCount = (desiredNode.childNodes) ? desiredNode.childNodes.length : 0;
+            for (let desiredAttr in desiredAttrs) {
+                let found = false;
+                for (let a = 0; a < currentAttrs.length; a++) {
+                    if (currentAttrs[a].name === desiredAttr) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    let desiredAttrValue = this.getAttribute(desiredNode, desiredAttr);
+                    operations.push({
+                        type: sn.vdom.operation.SET_ATTRIBUTE,
+                        target: currentNode,
+                        name: desiredAttr,
+                        value: desiredAttrValue
+                    });
+                }
+            }
+            return operations;
+        },
+        diffChildren: function (currentNode, desiredNode) {
+            let operations = [];
+            let desiredChildNodes = [];
+            if (desiredNode.childNodes) {
+                desiredNode.childNodes.map((item) => {
+                    if (sn.isArray(item))
+                        desiredChildNodes = desiredChildNodes.concat(item);
+                    else
+                        desiredChildNodes.push(item);
+                });
+            }
+            let desiredChildCount = desiredChildNodes.length;
             let currentChildCount = (currentNode.childNodes) ? currentNode.childNodes.length : 0;
             for (let c = 0; c < desiredChildCount; c++) {
-                let desiredChild = desiredNode.childNodes[c];
+                let desiredChild = desiredChildNodes[c];
                 let currentChild = (currentNode.childNodes) ? currentNode.childNodes[c] : null;
+                if (!sn.isObject(desiredChild)) {
+                    desiredChild = {
+                        nodeType: sn.vdom.node.TEXT,
+                        textContent: desiredChild,
+                        attributes: {},
+                        childNodes: []
+                    };
+                }
                 if (!currentChild) {
                     if (!sn.isEmpty(desiredChild)) {
                         operations.push({
@@ -198,12 +205,22 @@ var sn;
                     let currentComponent = this.getAttribute(currentChild, "data-sn-component");
                     let currentComponentID = (currentComponent) ? currentComponent.definition.name : null;
                     if (!desiredChildIsComponent || (currentComponent && currentComponentID !== desiredComponentID)) {
-                        operations.push({
-                            type: sn.vdom.operation.REPLACE_CHILD,
-                            target: currentNode,
-                            child: desiredChild,
-                            oldChild: currentChild
-                        });
+                        if (desiredChild.nodeType !== sn.vdom.node.HTML) {
+                            operations.push({
+                                type: sn.vdom.operation.REPLACE_CHILD,
+                                target: currentNode,
+                                child: desiredChild,
+                                oldChild: currentChild
+                            });
+                        }
+                        else if (desiredChild.innerHTML != currentChild.outerHTML) {
+                            operations.push({
+                                type: sn.vdom.operation.SET_ATTRIBUTE,
+                                target: currentNode,
+                                name: "innerHTML",
+                                value: desiredChild.innerHTML
+                            });
+                        }
                     }
                 }
                 else {
@@ -221,31 +238,81 @@ var sn;
             }
             return operations;
         },
+        diff: function (currentNode, desiredNode, ignoreAttribute) {
+            let operations = [];
+            if (!ignoreAttribute)
+                operations = operations.concat(this.diffAttributes(currentNode, desiredNode));
+            if (desiredNode.nodeType === sn.vdom.node.TEXT) {
+                let desiredTextContent = this.getAttribute(desiredNode, "textContent");
+                if (desiredTextContent != this.getAttribute(currentNode, "textContent")) {
+                    operations.push({
+                        type: sn.vdom.operation.SET_ATTRIBUTE,
+                        target: currentNode,
+                        name: "textContent",
+                        value: desiredTextContent
+                    });
+                }
+            }
+            else if (desiredNode.nodeType === sn.vdom.node.HTML) {
+                let desiredInnerHTML = this.getAttribute(desiredNode, "innerHTML");
+                if (desiredInnerHTML != this.getAttribute(currentNode, "innerHTML")) {
+                    operations.push({
+                        type: sn.vdom.operation.SET_ATTRIBUTE,
+                        target: currentNode,
+                        name: "innerHTML",
+                        value: desiredInnerHTML
+                    });
+                }
+            }
+            operations = operations.concat(this.diffChildren(currentNode, desiredNode));
+            return operations;
+        },
         createRealNode: function (node, scope) {
             let realNode;
-            if (node.nodeType === sn.vdom.node.TEXT) {
+            if (node.nodeType === sn.vdom.node.TEXT || node.nodeType === sn.vdom.node.HTML) {
                 realNode = document.createTextNode(node.textContent);
             }
             else if (node.nodeType === sn.vdom.node.ELEMENT) {
                 realNode = document.createElement(node.tagName);
-                if (node.attributes) {
-                    for (let attrName in node.attributes) {
-                        let attrValue = node.attributes[attrName];
-                        if (typeof attrValue === 'function')
-                            attrValue = attrValue.bind(scope);
-                        this.setAttribute(realNode, attrName, attrValue);
-                    }
-                }
-                if (node.childNodes) {
+                if (node.childNodes.length > 0) {
                     var virtualContainer = document.createDocumentFragment();
-                    for (var a = 0; a < node.childNodes.length; a++) {
-                        let child = node.childNodes[a];
-                        if (child)
-                            virtualContainer.appendChild(this.createRealNode(child, scope));
+                    var innerHTML = "";
+                    let processChild = (child) => {
+                        if (!sn.isEmpty(child)) {
+                            if (sn.isArray(child)) {
+                                child.map((item) => {
+                                    processChild(item);
+                                });
+                            }
+                            else if (!sn.isObject(child)) {
+                                processChild({
+                                    nodeType: sn.vdom.node.TEXT,
+                                    textContent: child,
+                                    attributes: {},
+                                    childNodes: []
+                                });
+                            }
+                            else if (child.nodeType === sn.vdom.node.HTML) {
+                                innerHTML += child.innerHTML;
+                            }
+                            else {
+                                virtualContainer.appendChild(this.createRealNode(child, scope));
+                            }
+                        }
+                    };
+                    node.childNodes.map(processChild);
+                    if (innerHTML !== "") {
+                        node.attributes.innerHTML = innerHTML;
                     }
-                    if (realNode.appendChild) {
+                    else if (realNode.appendChild) {
                         realNode.appendChild(virtualContainer);
                     }
+                }
+                for (let attrName in node.attributes) {
+                    let attrValue = node.attributes[attrName];
+                    if (typeof attrValue === 'function')
+                        attrValue = attrValue.bind(scope);
+                    this.setAttribute(realNode, attrName, attrValue);
                 }
             }
             else if (node.nodeType === sn.vdom.node.COMPONENT) {
@@ -254,49 +321,59 @@ var sn;
             }
             return realNode;
         },
-        createVirtualNode: function (tagName, attributes, childrenOrValue) {
+        createVirtualNode: function (tagNameOrContent, attributes, childrenOrValue) {
             let node = null;
+            if (!sn.inArray(["string", "object"], typeof tagNameOrContent) || sn.isEmpty(tagNameOrContent))
+                return sn.error("Expecting a non-empty string or Object as first argument of el()");
             if (!sn.isDefined(childrenOrValue) && sn.isDefined(attributes) &&
                 (sn.isArray(attributes) || !sn.isObject(attributes) || attributes.$virtual === true)) {
-                childrenOrValue = attributes;
-                attributes = null;
+                childrenOrValue = sn.copy(attributes);
+                attributes = {};
             }
-            if (sn.isObject(tagName)) {
+            else {
+                attributes = attributes || {};
+            }
+            if (sn.isObject(tagNameOrContent)) {
                 node = {
                     nodeType: sn.vdom.node.COMPONENT,
-                    tagName: tagName,
-                    attributes: attributes
+                    tagName: tagNameOrContent
                 };
             }
             else {
-                let tagNameUC = tagName.toString().toUpperCase();
+                let tagNameUC = tagNameOrContent.toString().toUpperCase();
                 if (!sn.inArray(sn.vdom.allowedTagName, tagNameUC)) {
-                    node = {
-                        nodeType: sn.vdom.node.TEXT,
-                        textContent: tagName
-                    };
+                    if (attributes.html === true) {
+                        node = {
+                            nodeType: sn.vdom.node.HTML,
+                            innerHTML: tagNameOrContent
+                        };
+                        delete attributes.html;
+                    }
+                    else {
+                        node = {
+                            nodeType: sn.vdom.node.TEXT,
+                            textContent: tagNameOrContent
+                        };
+                    }
                 }
                 else {
                     node = {
-                        tagName: tagNameUC,
                         nodeType: sn.vdom.node.ELEMENT,
-                        attributes: attributes
+                        tagName: tagNameUC
                     };
                     if (sn.isArray(childrenOrValue)) {
                         node.childNodes = childrenOrValue;
                     }
-                    else if (sn.isObject(childrenOrValue)) {
+                    else if (!sn.isEmpty(childrenOrValue)) {
                         node.childNodes = [childrenOrValue];
                     }
-                    else if (!sn.isEmpty(childrenOrValue)) {
-                        node.childNodes = [{
-                                nodeType: sn.vdom.node.TEXT,
-                                textContent: childrenOrValue
-                            }];
+                    else {
+                        node.childNodes = [];
                     }
                 }
             }
             node.$virtual = true;
+            node.attributes = attributes;
             return node;
         }
     };
@@ -671,7 +748,6 @@ var sn;
         init: function (form, name, attributes, options) {
             this.value = form[name] || "";
             sn.component.observe(name, form, (newValue, oldValue) => {
-                this.$form.validateField(name, newValue);
                 this.value = newValue;
             });
         },
@@ -698,16 +774,16 @@ var sn;
             } : updateHandler;
         },
         render: function () {
-            var attributes = sn.extend({}, this.$attributes);
-            let css_classes = (!sn.isEmpty(attributes["class"] || "")) ? " " : "";
+            var attributes = sn.copy(this.$attributes);
+            let css_classes = (!sn.isEmpty(attributes["class"] || "")) ? attributes["class"] + " " : "";
             if (!sn.isEmpty(this.$form.$errors[attributes.name])) {
-                css_classes += "sn-invalid";
+                css_classes += sn.config.form.invalidPrefix;
                 this.$form.$errors[attributes.name].map((item) => {
-                    css_classes += " sn-invalid-" + item.replace("_", "-");
+                    css_classes += " " + sn.config.form.invalidPrefix + "-" + item.replace("_", "-");
                 });
             }
             else {
-                css_classes += "sn-valid";
+                css_classes += sn.config.form.validPrefix;
             }
             attributes["class"] = css_classes;
             let tagName = (this.$options.choices)
@@ -761,6 +837,7 @@ var sn;
         }
         setFieldValue(name, value) {
             this[name] = value;
+            this.validateField(name, value);
         }
         setFieldsValue(data) {
             for (let key in data)
@@ -804,7 +881,11 @@ var sn;
     sn.version = "0.1";
     sn.config = {
         logPrefix: "sn: ",
-        debug: false
+        debug: true,
+        form: {
+            invalidPrefix: "sn-invalid",
+            validPrefix: "sn-valid"
+        }
     };
     function error(message) {
         if (sn.config.debug === true)
@@ -816,12 +897,74 @@ var sn;
             console.log(sn.config.logPrefix + message);
     }
     sn.log = log;
-    function extend(obj1, obj2) {
+    function extend(src, extra) {
+        if (arguments.length <= 1)
+            return src;
         if (Object.assign)
-            return Object.assign(obj1, obj2);
-        return obj1;
+            return Object.assign(src, extra);
+        for (var key in extra) {
+            if (extra.hasOwnProperty(key)) {
+                src[key] = extra[key];
+            }
+        }
+        return src;
     }
     sn.extend = extend;
+    function copy(src, _visited) {
+        if (!sn.isDefined(src) || !sn.isObject(src)) {
+            return src;
+        }
+        if (_visited == undefined) {
+            _visited = [];
+        }
+        else {
+            var i, len = _visited.length;
+            for (i = 0; i < len; i++) {
+                if (src === _visited[i]) {
+                    return src;
+                }
+            }
+        }
+        _visited.push(src);
+        if (typeof src.clone == 'function') {
+            return src.clone(true);
+        }
+        if (Object.prototype.toString.call(src) == '[object Array]') {
+            ret = src.slice();
+            var i = ret.length;
+            while (i--) {
+                ret[i] = sn.copy(ret[i], _visited);
+            }
+            return ret;
+        }
+        if (src instanceof Date) {
+            return new Date(src.getTime());
+        }
+        if (src instanceof RegExp) {
+            return new RegExp(src);
+        }
+        if (src.nodeType && typeof src.cloneNode == 'function') {
+            return src.cloneNode(true);
+        }
+        var proto = (Object.getPrototypeOf ? Object.getPrototypeOf(src) : src.__proto__);
+        if (!proto) {
+            proto = src.constructor.prototype;
+        }
+        var ret = sn.createObject(proto);
+        for (var key in src) {
+            ret[key] = sn.copy(src[key], _visited);
+        }
+        return ret;
+    }
+    sn.copy = copy;
+    function createObject(prototype) {
+        if (Object.create)
+            return Object.create(prototype);
+        function F() { }
+        F.prototype = prototype;
+        return new F();
+    }
+    sn.createObject = createObject;
     function isObject(value) {
         return (typeof value === "object");
     }

@@ -6,7 +6,11 @@ namespace sn
     // config
     export var config = {
         logPrefix: "sn: ",
-        debug: false
+        debug: true,
+        form: {
+            invalidPrefix: "sn-invalid",
+            validPrefix: "sn-valid"
+        }
     }
 
     // error
@@ -23,12 +27,99 @@ namespace sn
             console.log(sn.config.logPrefix + message);
     }
 
-    export function extend(obj1, obj2)
+    // extend object or array
+    export function extend(src, extra)
     {
+        if(arguments.length <= 1)
+            return src;
+
         if(Object.assign)
-            return Object.assign(obj1, obj2);
-        // todo
-        return obj1;
+            return Object.assign(src, extra);
+
+        for(var key in extra) {
+            if (extra.hasOwnProperty(key)) {
+                src[key] = extra[key];
+            }
+        }
+        return src;
+    }
+
+    // deep copy an object
+    export function copy(src, _visited?) {
+
+        if(!sn.isDefined(src) || !sn.isObject(src)) {
+            return src;
+        }
+
+        // Initialize the visited objects array if needed
+        // This is used to detect cyclic references
+        if (_visited == undefined){
+            _visited = [];
+        }
+        // Otherwise, ensure src has not already been visited
+        else {
+            var i, len = _visited.length;
+            for (i = 0; i < len; i++) {
+                // If src was already visited, don't try to copy it, just return the reference
+                if (src === _visited[i]) {
+                    return src;
+                }
+            }
+        }
+
+        // Add this object to the visited array
+        _visited.push(src);
+
+        //Honor native/custom clone methods
+        if(typeof src.clone == 'function'){
+            return src.clone(true);
+        }
+
+        //Special cases:
+        if (Object.prototype.toString.call(src) == '[object Array]') {
+            //[].slice(0) would soft clone
+            ret = src.slice();
+            var i = ret.length;
+            while (i--){
+                ret[i] = sn.copy(ret[i], _visited);
+            }
+            return ret;
+        }
+
+        if (src instanceof Date){
+            return new Date(src.getTime());
+        }
+
+        if(src instanceof RegExp){
+            return new RegExp(src);
+        }
+        //DOM Elements
+        if(src.nodeType && typeof src.cloneNode == 'function'){
+            return src.cloneNode(true);
+        }
+
+        //If we've reached here, we have a regular object, array, or function
+
+        //make sure the returned object has the same prototype as the original
+        var proto = (Object.getPrototypeOf ? Object.getPrototypeOf(src): src.__proto__);
+        if (!proto) {
+            proto = src.constructor.prototype; //this line would probably only be reached by very old browsers
+        }
+        var ret = sn.createObject(proto);
+
+        for(var key in src) {
+            ret[key] = sn.copy(src[key], _visited);
+        }
+        return ret;
+    }
+
+    export function createObject(prototype)
+    {
+        if(Object.create)
+            return Object.create(prototype);
+        function F() {}
+        F.prototype = prototype;
+        return new F();
     }
 
     // is object
