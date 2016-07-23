@@ -197,10 +197,20 @@ namespace sn
                     // apply validation
                     for(let r in rules)
                     {
-                        let validator = rules[r];
-                        let assertion = sn.validation[validator](fieldValue);
-                        if(assertion !== true)
-                            errors.push(validator);
+                        let validator = rules[r].toString().toLowerCase();
+                        let args = null;
+                        let argsIndex = validator.indexOf(":");
+                        if(argsIndex > 0)
+                        {
+                            args = validator.substring(argsIndex + 1).split(",");
+                            validator = validator.substring(0, argsIndex);
+                        }
+                        if(sn.validation[validator])
+                        {
+                            let assertion = sn.validation[validator](fieldValue, args, fieldName, this);
+                            if(assertion !== true)
+                                errors.push(validator);
+                        }
                     }
                 }
             }

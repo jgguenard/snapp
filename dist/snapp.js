@@ -734,6 +734,59 @@ var sn;
     sn.validation = {
         required: function (value) {
             return !sn.isEmpty(value);
+        },
+        length: function (value, args) {
+            return value.length == args[0];
+        },
+        minlength: function (value, args) {
+            return value.length >= args[0];
+        },
+        maxlength: function (value, args) {
+            return value.length <= args[0];
+        },
+        min: function (value, args) {
+            return !isNaN(value) && parseFloat(value) >= args[0];
+        },
+        max: function (value, args) {
+            return !isNaN(value) && parseFloat(value) <= args[0];
+        },
+        between: function (value, args) {
+            if (isNaN(value))
+                return false;
+            let v = parseFloat(value);
+            return (v >= args[0] && v <= args[1]);
+        },
+        email: function (value) {
+            let regex = /^((([a-z]|\d|[!#\$%&'\*\+\-\/=\?\^_`{\|}~]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])+(\.([a-z]|\d|[!#\$%&'\*\+\-\/=\?\^_`{\|}~]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])+)*)|((\x22)((((\x20|\x09)*(\x0d\x0a))?(\x20|\x09)+)?(([\x01-\x08\x0b\x0c\x0e-\x1f\x7f]|\x21|[\x23-\x5b]|[\x5d-\x7e]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(\\([\x01-\x09\x0b\x0c\x0d-\x7f]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]))))*(((\x20|\x09)*(\x0d\x0a))?(\x20|\x09)+)?(\x22)))@((([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))\.)+(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))$/i;
+            return regex.test(value);
+        },
+        url: function (value) {
+            let regex = new RegExp("^" +
+                "(?:(?:https?|ftp)://)?" +
+                "(?:\\S+(?::\\S*)?@)?" + "(?:" +
+                "(?:[1-9]\\d?|1\\d\\d|2[01]\\d|22[0-3])" + "(?:\\.(?:1?\\d{1,2}|2[0-4]\\d|25[0-5])){2}" + "(?:\\.(?:[1-9]\\d?|1\\d\\d|2[0-4]\\d|25[0-4]))" + "|" +
+                '(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)' +
+                '(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)*' +
+                '(?:\\.(?:[a-z\\u00a1-\\uffff]{2,}))' + ")" +
+                "(?::\\d{2,5})?" +
+                "(?:/\\S*)?" + "$", 'i');
+            return regex.test(value);
+        },
+        alphanum: function (value) {
+            let regex = /^\w+$/i;
+            return regex.test(value);
+        },
+        digits: function (value) {
+            let regex = /^\d+$/;
+            return regex.test(value);
+        },
+        number: function (value) {
+            let regex = /^-?(\d*\.)?\d+(e[-+]?\d+)?$/i;
+            return regex.test(value);
+        },
+        integer: function (value) {
+            let regex = /^-?\d+$/;
+            return regex.test(value);
         }
     };
 })(sn || (sn = {}));
@@ -860,10 +913,18 @@ var sn;
                     if (!sn.isArray(rules))
                         rules = [rules];
                     for (let r in rules) {
-                        let validator = rules[r];
-                        let assertion = sn.validation[validator](fieldValue);
-                        if (assertion !== true)
-                            errors.push(validator);
+                        let validator = rules[r].toString().toLowerCase();
+                        let args = null;
+                        let argsIndex = validator.indexOf(":");
+                        if (argsIndex > 0) {
+                            args = validator.substring(argsIndex + 1).split(",");
+                            validator = validator.substring(0, argsIndex);
+                        }
+                        if (sn.validation[validator]) {
+                            let assertion = sn.validation[validator](fieldValue, args, fieldName, this);
+                            if (assertion !== true)
+                                errors.push(validator);
+                        }
                     }
                 }
             }
@@ -990,6 +1051,11 @@ var sn;
         return isNaN(value) ? !1 : (x = parseFloat(value), (0 | x) === x);
     }
     sn.isInteger = isInteger;
+    function isEmpty(value) {
+        return !sn.isDefined(value) || value === "" || (sn.isArray(value) && value.length < 1) ||
+            (sn.isObject(value) && Object.keys(value).length < 1);
+    }
+    sn.isEmpty = isEmpty;
     function guid() {
         function s4() {
             return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
@@ -997,11 +1063,6 @@ var sn;
         return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
     }
     sn.guid = guid;
-    function isEmpty(value) {
-        return !sn.isDefined(value) || value === "" || (sn.isArray(value) && value.length < 1) ||
-            (sn.isObject(value) && Object.keys(value).length < 1);
-    }
-    sn.isEmpty = isEmpty;
     function mount(container, componentDefinition, initArguments) {
         let mountedComponent = sn.vdom.getAttribute(container, "data-sn-component");
         if (mountedComponent && mountedComponent.definition === componentDefinition) {

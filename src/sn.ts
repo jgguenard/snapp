@@ -159,19 +159,19 @@ namespace sn
         return isNaN(value) ? !1 : (x = parseFloat(value), (0 | x) === x);
     }
 
+    // is empty
+    export function isEmpty(value: any)
+    {
+        return !sn.isDefined(value) || value === "" || (sn.isArray(value) && value.length < 1) ||
+            (sn.isObject(value) && Object.keys(value).length < 1);
+    }
+
     // guid
     export function guid() {
         function s4() {
             return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
         }
         return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
-    }
-
-    // is empty
-    export function isEmpty(value: any)
-    {
-        return !sn.isDefined(value) || value === "" || (sn.isArray(value) && value.length < 1) ||
-            (sn.isObject(value) && Object.keys(value).length < 1);
     }
 
     // mount component on top of a dom element
