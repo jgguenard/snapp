@@ -20,6 +20,10 @@ A module to manage event emitters and observers
 
 A module to render forms
 
+### mask
+
+A module to format the way values are displayed
+
 ### request
 
 A module to make AJAX requests 
@@ -37,7 +41,7 @@ A module to validate data, mainly used for form fields
 
 ```js
 // your function must return a boolean value (true = valid)
-sn.validation.isTom = function(value, args, fieldName, form)
+sn.validation.isTom = function(value, fieldName, form)
 {
   return value === "Tom";
 }
@@ -49,7 +53,6 @@ The virtual DOM engine (mainly used to diff and patch components)
 
 ## todo
 
-* [component] Fix embedded form/scope not triggering parent scope rendering
+* [mask] reverse mask (money)
 * [request] File upload
-* [form] Input masks
 * [core] Support for Firefox

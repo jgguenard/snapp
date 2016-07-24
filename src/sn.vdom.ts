@@ -238,14 +238,15 @@ namespace sn
                     // detect mounted component to avoid diffing a nested component
                     let desiredChildIsComponent = desiredChild.nodeType === sn.vdom.node.COMPONENT;
                     let currentComponent = this.getAttribute(currentChild, "data-sn-component");
-
                     if (
                         !desiredChildIsComponent ||
                         (currentComponent && !sn.component.hasDefinition(currentComponent, desiredChild.definition))
                     ) {
+                        // either 1 of the children is not a component or they are different components so
+                        // let's replace child
                         if(desiredChild.nodeType !== sn.vdom.node.HTML)
                         {
-                            // replace child
+                            // replacing node
                             operations.push({
                                 type: sn.vdom.operation.REPLACE_CHILD,
                                 target: currentNode,
@@ -261,6 +262,9 @@ namespace sn
                                 value: desiredChild.innerHTML
                             });
                         }
+                    } else if(currentComponent) {
+                        // nested component might still need to be rendered
+                        sn.component.requestComponentRendering(currentComponent);
                     }
                 } else {
                     // compare children

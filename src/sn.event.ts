@@ -62,6 +62,17 @@ namespace sn
                     }
                 }
             }
+        },
+
+        stopNativeEvent: function(event)
+        {
+            if(event.preventDefault){
+                event.preventDefault();
+                event.stopPropagation()
+            } else {
+                event.returnValue = false;
+                event.cancelBubble = true;
+            }
         }
 
     }

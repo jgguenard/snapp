@@ -17,6 +17,10 @@ namespace sn
             // observe form data changes
             sn.component.observe(name, form, (newValue, oldValue) => {
 
+                // make sure we apply the display format if a mask was set
+                if(form.$fields[name].mask)
+                    newValue = sn.mask.applyMask(form.$fields[name].mask, newValue, "display");
+
                 // set field value
                 this.value = newValue;
 
@@ -60,6 +64,14 @@ namespace sn
                 clearTimeout(timer);
                 timer = setTimeout(updateHandler.bind(this, event), this.$options.updateDebounce);
             } : updateHandler;
+
+            // mask
+            if(this.$options.mask && sn.mask.parser[this.$options.mask])
+            {
+                this.$attributes.onkeypress = sn.mask.applyInputMask.bind(sn.mask, this.$options.mask);
+                // since applyInputMask() prevents "onkeypress", "onchange" is never triggered so fall back on "onblur"
+                this.$attributes.onblur = updateHandler;
+            }
         },
 
         render: function() {
@@ -156,8 +168,13 @@ namespace sn
 
         setFieldValue(name, value)
         {
+            // make sure we apply the data format if a mask was set
+            if(this.$fields[name].mask)
+                value = sn.mask.applyMask(this.$fields[name].mask, value, "data");
+
             // save value
             this[name] = value;
+
             // validate it
             this.validateField(name, value);
         }

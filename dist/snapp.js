@@ -221,6 +221,9 @@ var sn;
                             });
                         }
                     }
+                    else if (currentComponent) {
+                        sn.component.requestComponentRendering(currentComponent);
+                    }
                 }
                 else {
                     operations = operations.concat(this.diff(currentChild, desiredChild));
@@ -420,6 +423,16 @@ var sn;
                         break;
                     }
                 }
+            }
+        },
+        stopNativeEvent: function (event) {
+            if (event.preventDefault) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            else {
+                event.returnValue = false;
+                event.cancelBubble = true;
             }
         }
     };
@@ -799,8 +812,102 @@ var sn;
 })(sn || (sn = {}));
 var sn;
 (function (sn) {
-    {
-    }
+    sn.mask = {
+        isPrintable: function (key) {
+            return key >= 32 && key < 127;
+        },
+        getKey: function (e) {
+            return window.event ? window.event["keyCode"] : e ? e.which : 0;
+        },
+        getRegexAt: function (regex, position) {
+            if (sn.isArray(regex))
+                return regex[position];
+            return regex;
+        },
+        applyInputMask: function (maskName, event) {
+            let key = this.getKey(event);
+            if (this.isPrintable(key)) {
+                var ch = String.fromCharCode(key);
+                var value = event.target.value;
+                var str = value + ch;
+                var pos = str.length;
+                var parser = this.parser[maskName];
+                var regex = this.getRegexAt(parser.regex, pos - 1);
+                if (regex.test(ch) && pos <= parser.format.display.length) {
+                    let filler = "";
+                    while (pos < parser.format.display.length && parser.format.display.charAt(pos - 1) != "#") {
+                        filler += parser.format.display.charAt(pos - 1);
+                        pos++;
+                    }
+                    if (filler !== "")
+                        str = value + filler + ch;
+                    event.target.value = str;
+                }
+                sn.event.stopNativeEvent(event);
+            }
+        },
+        applyMask: function (maskName, value, formatName) {
+            if (!formatName)
+                formatName = "display";
+            let mask = this.parser[maskName];
+            if (!mask)
+                return value;
+            let format = mask.format[formatName];
+            if (!format)
+                return value;
+            value = this.getUnmaskedValue(maskName, value, formatName);
+            let mValue = "";
+            for (let c = 0; c < value.length; c++) {
+                let ch = value.charAt(c);
+                let str = mValue + ch;
+                let pos = str.length;
+                let filler = "";
+                while (pos < format.length && format.charAt(pos - 1) != "#") {
+                    filler += format.charAt(pos - 1);
+                    pos++;
+                }
+                mValue += filler + ch;
+            }
+            return mValue;
+        },
+        getUnmaskedValue: function (maskName, value, formatName) {
+            if (sn.isEmpty(value))
+                return value;
+            else
+                value = value.toString();
+            let parser = this.parser[maskName];
+            let format = parser.format[formatName];
+            let allowedCharCount = 0;
+            for (let i = 0; i < format.length; i++)
+                if (format[i] === "#")
+                    allowedCharCount++;
+            for (let pos = 0; pos < allowedCharCount && pos < value.length; pos++) {
+                let regex = this.getRegexAt(parser.regex, pos);
+                while (!regex.test(value.charAt(pos)) && pos < value.length)
+                    value = value.substring(0, pos) + value.substring(pos + 1);
+            }
+            if (value.length > allowedCharCount)
+                value = value.substring(0, allowedCharCount);
+            return value;
+        },
+        parser: {
+            phone: {
+                format: {
+                    display: "(###) ###-####",
+                    data: "##########"
+                },
+                regex: /\d/
+            },
+            money: {
+                format: {
+                    display: "#########.##",
+                    data: "#########.##"
+                },
+                reverse: true,
+                regex: /\d/
+            }
+        }
+    };
 })(sn || (sn = {}));
 var sn;
 (function (sn) {
@@ -813,6 +920,8 @@ var sn;
         init: function (form, name, attributes, options) {
             this.value = form[name] || "";
             sn.component.observe(name, form, (newValue, oldValue) => {
+                if (form.$fields[name].mask)
+                    newValue = sn.mask.applyMask(form.$fields[name].mask, newValue, "display");
                 this.value = newValue;
             });
         },
@@ -837,6 +946,10 @@ var sn;
                 clearTimeout(timer);
                 timer = setTimeout(updateHandler.bind(this, event), this.$options.updateDebounce);
             } : updateHandler;
+            if (this.$options.mask && sn.mask.parser[this.$options.mask]) {
+                this.$attributes.onkeypress = sn.mask.applyInputMask.bind(sn.mask, this.$options.mask);
+                this.$attributes.onblur = updateHandler;
+            }
         },
         render: function () {
             var attributes = sn.copy(this.$attributes);
@@ -901,6 +1014,8 @@ var sn;
             this.$pristine = (value === true);
         }
         setFieldValue(name, value) {
+            if (this.$fields[name].mask)
+                value = sn.mask.applyMask(this.$fields[name].mask, value, "data");
             this[name] = value;
             this.validateField(name, value);
         }
