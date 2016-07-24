@@ -1,6 +1,6 @@
 # sn.app
 
-A simple framework to build single-page applications for modern browsers
+A simple framework to build Web applications that run in modern browsers
 
 ## modules
 
@@ -10,11 +10,11 @@ A series of helpers
 
 ### component
 
-A module to manage components
+A module to work with components
 
 ### event
 
-A module to manage event emitters and observers
+A module to handle native and custom events
 
 ### form
 
@@ -22,7 +22,7 @@ A module to render forms
 
 ### mask
 
-A module to format the way values are displayed
+A module to format the way values are displayed and stored
 
 ### request
 
@@ -38,10 +38,9 @@ A module to validate data, mainly used for form fields
 
 #### How to add your own validator
 
-
 ```js
 // your function must return a boolean value (true = valid)
-sn.validation.isTom = function(value, fieldName, form)
+sn.validation.isTom = function(value, args, fieldName, form)
 {
   return value === "Tom";
 }
@@ -53,6 +52,5 @@ The virtual DOM engine (mainly used to diff and patch components)
 
 ## todo
 
-* [mask] reverse mask (money)
-* [request] File upload
+* [request] File upload (http://stackoverflow.com/questions/6211145/upload-file-with-ajax-xmlhttprequest)
 * [core] Support for Firefox

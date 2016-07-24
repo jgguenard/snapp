@@ -2,6 +2,23 @@ namespace sn
 {
     export var mask =
     {
+        add: function(maskName, mask)
+        {
+            // register mask
+            this.masks[maskName] = mask;
+        },
+
+        getMask: function(mask, args?)
+        {
+            if(sn.isObject(mask))
+                return mask;
+            if(sn.isFunction(mask))
+                return mask.apply({}, args);
+            if(this.masks[mask])
+                return this.masks[mask].apply({}, args);
+            return null;
+        },
+
         isPrintable: function(key) {
             return key >= 32 && key < 127;
         },
@@ -17,70 +34,81 @@ namespace sn
             return regex;
         },
 
-        applyInputMask: function(maskName, event) {
+        applyInputMask: function(mask, event) {
             let key = this.getKey(event);
             if (this.isPrintable(key)) {
-                var ch = String.fromCharCode(key);
-                var value = event.target.value;
-                var str = value + ch;
-                var pos = str.length;
-                var parser = this.parser[maskName];
-                var regex = this.getRegexAt(parser.regex, pos - 1);
-                if(regex.test(ch) && pos <= parser.format.display.length)
-                {
-                    let filler = "";
-                    while(pos < parser.format.display.length && parser.format.display.charAt(pos-1) != "#")
-                    {
-                        filler += parser.format.display.charAt(pos-1);
-                        pos++;
-                    }
-                    if(filler !== "")
-                        str = value + filler + ch;
-                    event.target.value = str;
-                }
+                mask = this.getMask(mask);
+
+                let chr = String.fromCharCode(key);
+                let inputValue = event.target.value;
+                let unmaskedValue = this.getUnmaskedValue(mask, inputValue);
+                let slot = unmaskedValue.length;
+
+                // get regex for the current slot
+                let regex = (mask.reverse === true)
+                    ? this.getRegexAt(mask.regex, mask.slots - slot - 1)
+                    : this.getRegexAt(mask.regex, slot);
+
+                // apply mask to new value
+                if(slot < mask.slots && regex.test(chr))
+                    event.target.value = this.applyMask(mask, event.target.value + chr, unmaskedValue + chr);
+
                 sn.event.stopNativeEvent(event);
             }
         },
 
-        applyMask: function(maskName, value, formatName?)
+        applyMask: function(mask, value, unmaskedValue?)
         {
-            // default format
-            if(!formatName)
-                formatName = "display";
+            // make sure we have a good value
+            if(!value) return value;
+            else value = value.toString();
 
             // get mask
-            let mask = this.parser[maskName];
+            mask = this.getMask(mask);
             if(!mask)
                 return value;
 
-            // get format
-            let format = mask.format[formatName];
-            if(!format)
-                return value;
-
             // get unmasked value
-            value = this.getUnmaskedValue(maskName, value, formatName);
+            if(!unmaskedValue)
+                unmaskedValue = this.getUnmaskedValue(mask, value);
 
-            let mValue = "";
-            // apply mask
-            for(let c = 0; c < value.length; c++)
+            // build masked value
+            let maskedValue = "";
+            if(mask.reverse === true)
             {
-                let ch = value.charAt(c);
-                let str = mValue + ch;
-                let pos = str.length;
-                let filler = "";
-                while(pos < format.length && format.charAt(pos-1) != "#")
+                // in reverse mode, we start from the last character of the value
+                for(let c = 0; c < unmaskedValue.length; c++)
                 {
-                    filler += format.charAt(pos-1);
-                    pos++;
+                    let chr = unmaskedValue.charAt(unmaskedValue.length - c - 1);
+                    let pos = (mask.format.length - maskedValue.length - 1);
+                    let filler = "";
+                    while(pos > 0 && mask.format.charAt(pos) != "#")
+                    {
+                        filler = mask.format.charAt(pos) + filler;
+                        pos--;
+                    }
+                    maskedValue = chr + filler + maskedValue;
                 }
-                mValue += filler + ch;
+            } else {
+                // in normal mode, we start from the first character of the value
+                for(let c = 0; c < unmaskedValue.length; c++)
+                {
+                    let chr = unmaskedValue.charAt(c);
+                    let pos = maskedValue.length + 1;
+                    let filler = "";
+                    while(pos < mask.format.length && mask.format.charAt(pos-1) != "#")
+                    {
+                        filler += mask.format.charAt(pos-1);
+                        pos++;
+                    }
+                    maskedValue += filler + chr;
+                }
             }
 
-            return mValue;
+            return maskedValue;
         },
 
-        getUnmaskedValue: function(maskName, value, formatName)
+        getUnmaskedValue: function(mask, value)
         {
             // check value integrity
             if(sn.isEmpty(value))
@@ -89,49 +117,59 @@ namespace sn
                 value = value.toString();
 
             // get mask
-            let parser = this.parser[maskName];
-            let format = parser.format[formatName];
-
-            // get number of character slots
-            let allowedCharCount = 0;
-            for(let i=0;i<format.length;i++)
-                if(format[i] === "#")
-                    allowedCharCount++;
+            mask = this.getMask(mask);
+            if(!mask)
+                return value;
 
             // for all slots, try to match regex by removing characters
-            for(let pos = 0; pos < allowedCharCount && pos < value.length; pos++)
+            for(let pos = 0; pos < mask.slots && pos < value.length; pos++)
             {
-                let regex = this.getRegexAt(parser.regex, pos);
+                let regex = this.getRegexAt(mask.regex, pos);
                 while(!regex.test(value.charAt(pos)) && pos < value.length)
                     value = value.substring(0, pos) + value.substring(pos +1);
             }
 
             // if too long, cut it
-            if(value.length > allowedCharCount)
-                value = value.substring(0, allowedCharCount);
+            if(value.length > mask.slots)
+                value = value.substring(0, mask.slots);
 
             return value;
         },
 
-        parser: {
+        masks: {
 
             // phone number
-            phone: {
-                format: {
-                    display: "(###) ###-####",
-                    data: "##########"
-                },
-                regex: /\d/
+            phone: function() {
+                return {
+                    format: "(###) ###-####",
+                    slots: 10,
+                    regex: /\d/
+                }
             },
 
-            // money with 2 digits
-            money: {
-                format: {
-                    display: "#########.##",
-                    data:  "#########.##"
-                },
-                reverse: true, // TODO
-                regex: /\d/
+            // amount
+            amount: function(options) {
+
+                options = sn.extend({
+                    digits: 2,
+                    digitSeparator: ".",
+                    thousandSeparator: " "
+                }, options || {});
+
+                let format = "###" + options.thousandSeparator + "###"+ options.thousandSeparator + "###" +
+                    options.thousandSeparator + "###"+ options.thousandSeparator + "###";
+
+                if(options.digits > 0)
+                    format += options.digitSeparator + "#".repeat(options.digits);
+
+                let slots = 15 + options.digits;
+
+                return {
+                    format: format,
+                    slots: slots,
+                    reverse: true,
+                    regex: /\d/
+                }
             }
         }
     }

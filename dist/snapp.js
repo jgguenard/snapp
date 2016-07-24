@@ -813,6 +813,18 @@ var sn;
 var sn;
 (function (sn) {
     sn.mask = {
+        add: function (maskName, mask) {
+            this.masks[maskName] = mask;
+        },
+        getMask: function (mask, args) {
+            if (sn.isObject(mask))
+                return mask;
+            if (sn.isFunction(mask))
+                return mask.apply({}, args);
+            if (this.masks[mask])
+                return this.masks[mask].apply({}, args);
+            return null;
+        },
         isPrintable: function (key) {
             return key >= 32 && key < 127;
         },
@@ -824,87 +836,101 @@ var sn;
                 return regex[position];
             return regex;
         },
-        applyInputMask: function (maskName, event) {
+        applyInputMask: function (mask, event) {
             let key = this.getKey(event);
             if (this.isPrintable(key)) {
-                var ch = String.fromCharCode(key);
-                var value = event.target.value;
-                var str = value + ch;
-                var pos = str.length;
-                var parser = this.parser[maskName];
-                var regex = this.getRegexAt(parser.regex, pos - 1);
-                if (regex.test(ch) && pos <= parser.format.display.length) {
-                    let filler = "";
-                    while (pos < parser.format.display.length && parser.format.display.charAt(pos - 1) != "#") {
-                        filler += parser.format.display.charAt(pos - 1);
-                        pos++;
-                    }
-                    if (filler !== "")
-                        str = value + filler + ch;
-                    event.target.value = str;
-                }
+                mask = this.getMask(mask);
+                let chr = String.fromCharCode(key);
+                let inputValue = event.target.value;
+                let unmaskedValue = this.getUnmaskedValue(mask, inputValue);
+                let slot = unmaskedValue.length;
+                let regex = (mask.reverse === true)
+                    ? this.getRegexAt(mask.regex, mask.slots - slot - 1)
+                    : this.getRegexAt(mask.regex, slot);
+                if (slot < mask.slots && regex.test(chr))
+                    event.target.value = this.applyMask(mask, event.target.value + chr, unmaskedValue + chr);
                 sn.event.stopNativeEvent(event);
             }
         },
-        applyMask: function (maskName, value, formatName) {
-            if (!formatName)
-                formatName = "display";
-            let mask = this.parser[maskName];
+        applyMask: function (mask, value, unmaskedValue) {
+            if (!value)
+                return value;
+            else
+                value = value.toString();
+            mask = this.getMask(mask);
             if (!mask)
                 return value;
-            let format = mask.format[formatName];
-            if (!format)
-                return value;
-            value = this.getUnmaskedValue(maskName, value, formatName);
-            let mValue = "";
-            for (let c = 0; c < value.length; c++) {
-                let ch = value.charAt(c);
-                let str = mValue + ch;
-                let pos = str.length;
-                let filler = "";
-                while (pos < format.length && format.charAt(pos - 1) != "#") {
-                    filler += format.charAt(pos - 1);
-                    pos++;
+            if (!unmaskedValue)
+                unmaskedValue = this.getUnmaskedValue(mask, value);
+            let maskedValue = "";
+            if (mask.reverse === true) {
+                for (let c = 0; c < unmaskedValue.length; c++) {
+                    let chr = unmaskedValue.charAt(unmaskedValue.length - c - 1);
+                    let pos = (mask.format.length - maskedValue.length - 1);
+                    let filler = "";
+                    while (pos > 0 && mask.format.charAt(pos) != "#") {
+                        filler = mask.format.charAt(pos) + filler;
+                        pos--;
+                    }
+                    maskedValue = chr + filler + maskedValue;
                 }
-                mValue += filler + ch;
             }
-            return mValue;
+            else {
+                for (let c = 0; c < unmaskedValue.length; c++) {
+                    let chr = unmaskedValue.charAt(c);
+                    let pos = maskedValue.length + 1;
+                    let filler = "";
+                    while (pos < mask.format.length && mask.format.charAt(pos - 1) != "#") {
+                        filler += mask.format.charAt(pos - 1);
+                        pos++;
+                    }
+                    maskedValue += filler + chr;
+                }
+            }
+            return maskedValue;
         },
-        getUnmaskedValue: function (maskName, value, formatName) {
+        getUnmaskedValue: function (mask, value) {
             if (sn.isEmpty(value))
                 return value;
             else
                 value = value.toString();
-            let parser = this.parser[maskName];
-            let format = parser.format[formatName];
-            let allowedCharCount = 0;
-            for (let i = 0; i < format.length; i++)
-                if (format[i] === "#")
-                    allowedCharCount++;
-            for (let pos = 0; pos < allowedCharCount && pos < value.length; pos++) {
-                let regex = this.getRegexAt(parser.regex, pos);
+            mask = this.getMask(mask);
+            if (!mask)
+                return value;
+            for (let pos = 0; pos < mask.slots && pos < value.length; pos++) {
+                let regex = this.getRegexAt(mask.regex, pos);
                 while (!regex.test(value.charAt(pos)) && pos < value.length)
                     value = value.substring(0, pos) + value.substring(pos + 1);
             }
-            if (value.length > allowedCharCount)
-                value = value.substring(0, allowedCharCount);
+            if (value.length > mask.slots)
+                value = value.substring(0, mask.slots);
             return value;
         },
-        parser: {
-            phone: {
-                format: {
-                    display: "(###) ###-####",
-                    data: "##########"
-                },
-                regex: /\d/
+        masks: {
+            phone: function () {
+                return {
+                    format: "(###) ###-####",
+                    slots: 10,
+                    regex: /\d/
+                };
             },
-            money: {
-                format: {
-                    display: "#########.##",
-                    data: "#########.##"
-                },
-                reverse: true,
-                regex: /\d/
+            amount: function (options) {
+                options = sn.extend({
+                    digits: 2,
+                    digitSeparator: ".",
+                    thousandSeparator: " "
+                }, options || {});
+                let format = "###" + options.thousandSeparator + "###" + options.thousandSeparator + "###" +
+                    options.thousandSeparator + "###" + options.thousandSeparator + "###";
+                if (options.digits > 0)
+                    format += options.digitSeparator + "#".repeat(options.digits);
+                let slots = 15 + options.digits;
+                return {
+                    format: format,
+                    slots: slots,
+                    reverse: true,
+                    regex: /\d/
+                };
             }
         }
     };
@@ -920,8 +946,8 @@ var sn;
         init: function (form, name, attributes, options) {
             this.value = form[name] || "";
             sn.component.observe(name, form, (newValue, oldValue) => {
-                if (form.$fields[name].mask)
-                    newValue = sn.mask.applyMask(form.$fields[name].mask, newValue, "display");
+                if (form.$fields[name] && form.$fields[name].mask)
+                    newValue = sn.mask.applyMask(form.$fields[name].mask, newValue);
                 this.value = newValue;
             });
         },
@@ -938,6 +964,11 @@ var sn;
             }, attributes || {});
             let updateHandler = (event) => {
                 let value = event.target.value;
+                if (this.$options.mask) {
+                    value = sn.mask.applyMask(this.$options.mask, value);
+                    if (value !== event.target.value)
+                        event.target.value = value;
+                }
                 this.$form.setFieldValue(name, value);
                 this.$form.setPristine(false);
             };
@@ -946,7 +977,7 @@ var sn;
                 clearTimeout(timer);
                 timer = setTimeout(updateHandler.bind(this, event), this.$options.updateDebounce);
             } : updateHandler;
-            if (this.$options.mask && sn.mask.parser[this.$options.mask]) {
+            if (this.$options.mask) {
                 this.$attributes.onkeypress = sn.mask.applyInputMask.bind(sn.mask, this.$options.mask);
                 this.$attributes.onblur = updateHandler;
             }
@@ -1014,8 +1045,6 @@ var sn;
             this.$pristine = (value === true);
         }
         setFieldValue(name, value) {
-            if (this.$fields[name].mask)
-                value = sn.mask.applyMask(this.$fields[name].mask, value, "data");
             this[name] = value;
             this.validateField(name, value);
         }

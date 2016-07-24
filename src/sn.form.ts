@@ -17,9 +17,9 @@ namespace sn
             // observe form data changes
             sn.component.observe(name, form, (newValue, oldValue) => {
 
-                // make sure we apply the display format if a mask was set
-                if(form.$fields[name].mask)
-                    newValue = sn.mask.applyMask(form.$fields[name].mask, newValue, "display");
+                // make sure to apply a mask if necessary
+                if(form.$fields[name] && form.$fields[name].mask)
+                    newValue = sn.mask.applyMask(form.$fields[name].mask, newValue);
 
                 // set field value
                 this.value = newValue;
@@ -54,6 +54,13 @@ namespace sn
             let updateHandler = (event) => {
                 // get value
                 let value = event.target.value;
+                // make sure to apply mask again (in case "onchange" event wasn't trigger by input events)
+                if(this.$options.mask)
+                {
+                    value = sn.mask.applyMask(this.$options.mask, value);
+                    if(value !== event.target.value)
+                        event.target.value = value;
+                }
                 // save value to form scope
                 this.$form.setFieldValue(name, value);
                 // form is no longer considered pristine
@@ -66,7 +73,7 @@ namespace sn
             } : updateHandler;
 
             // mask
-            if(this.$options.mask && sn.mask.parser[this.$options.mask])
+            if(this.$options.mask)
             {
                 this.$attributes.onkeypress = sn.mask.applyInputMask.bind(sn.mask, this.$options.mask);
                 // since applyInputMask() prevents "onkeypress", "onchange" is never triggered so fall back on "onblur"
@@ -169,8 +176,8 @@ namespace sn
         setFieldValue(name, value)
         {
             // make sure we apply the data format if a mask was set
-            if(this.$fields[name].mask)
-                value = sn.mask.applyMask(this.$fields[name].mask, value, "data");
+            //if(this.$fields[name] && this.$fields[name].mask)
+            //    value = sn.mask.applyMask(this.$fields[name].mask, value, "data");
 
             // save value
             this[name] = value;
