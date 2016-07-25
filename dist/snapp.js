@@ -1088,6 +1088,8 @@ var sn;
             return (errors.length < 0);
         }
         field(name, attributes) {
+            if (!sn.isDefined(this[name]))
+                this.setFieldValue(name, attributes ? attributes.value || "" : "");
             return el(sn.FormField, { form: this, name: name, attributes: attributes, options: this.$fields[name] });
         }
     }

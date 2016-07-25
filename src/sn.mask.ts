@@ -2,12 +2,14 @@ namespace sn
 {
     export var mask =
     {
+        // register a new mask
         add: function(maskName, mask)
         {
             // register mask
             this.masks[maskName] = mask;
         },
 
+        // get mask object
         getMask: function(mask, args?)
         {
             if(sn.isObject(mask))
@@ -19,14 +21,17 @@ namespace sn
             return null;
         },
 
+        // is key displayable in an input
         isPrintable: function(key) {
             return key >= 32 && key < 127;
         },
 
+        // get key code
         getKey: function(e) {
             return window.event ? window.event["keyCode"] : e ? e.which : 0;
         },
 
+        // get regex for a specific slot of the mask
         getRegexAt: function(regex, position)
         {
             if(sn.isArray(regex))
@@ -34,6 +39,7 @@ namespace sn
             return regex;
         },
 
+        // apply a mask to an input element
         applyInputMask: function(mask, event) {
             let key = this.getKey(event);
             if (this.isPrintable(key)) {
@@ -57,6 +63,7 @@ namespace sn
             }
         },
 
+        // apply a mask to a value
         applyMask: function(mask, value, unmaskedValue?)
         {
             // make sure we have a good value
@@ -108,6 +115,7 @@ namespace sn
             return maskedValue;
         },
 
+        // return value without characters added by mask
         getUnmaskedValue: function(mask, value)
         {
             // check value integrity
@@ -136,6 +144,7 @@ namespace sn
             return value;
         },
 
+        // registered masks
         masks: {
 
             // phone number

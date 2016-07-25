@@ -245,6 +245,9 @@ namespace sn
         // return a field component
         field(name, attributes?)
         {
+            // make sure field is defined
+            if(!sn.isDefined(this[name]))
+                this.setFieldValue(name, attributes ? attributes.value || "" : "");
             return el(sn.FormField, { form: this, name: name, attributes: attributes, options: this.$fields[name] });
         }
     }
